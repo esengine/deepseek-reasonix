@@ -366,6 +366,11 @@ type SettingsView struct {
 	ExpandThinking    bool   `json:"expandThinking"`
 	ConversationWidth string `json:"conversationWidth,omitempty"`
 	ConfigPath        string `json:"configPath"`
+	// CacheContext is the per-project user attribution id sent to providers as
+	// user_id. It is only editable in a project workspace (CacheContextProject);
+	// the global panel never shows it and never writes it to the user config.
+	CacheContext        string `json:"cacheContext"`
+	CacheContextProject bool   `json:"cacheContextProject"`
 	// ShadowedByPath is the workspace reasonix.toml that outranks the file this
 	// panel writes, so an edit here can be overridden with nothing on screen to
 	// explain it (#4333). Empty when the panel's file is the one in effect.
@@ -1146,6 +1151,8 @@ func (a *App) Settings() SettingsView {
 		ExpandThinking:               cfg.Desktop.ExpandThinking,
 		ConversationWidth:            cfg.DesktopConversationWidth(),
 		ConfigPath:                   cfgPath,
+		CacheContext:                 a.cacheContextForWorkspace(root, cfg),
+		CacheContextProject:          strings.TrimSpace(root) != "",
 		ShadowedByPath:               shadowingConfigPath(cfgPath, root),
 		ProviderKinds:                nonNil(provider.Kinds()),
 		AutoApproveTools:             ctrl != nil && ctrl.AutoApproveTools(),
@@ -3263,6 +3270,62 @@ func (a *App) SetReasoningLanguage(lang string) error {
 	}
 	a.applyReasoningLanguageToLiveControllers(cfg.ReasoningLanguage())
 	return nil
+}
+
+// cacheContextForWorkspace returns the cachecontext in effect for the active
+// workspace: the project config value when the tab is a project (a shared
+// provider config may set it too), otherwise the user-global value. It never
+// writes; reading a nonexistent project config falls back to built-in defaults.
+func (a *App) cacheContextForWorkspace(root string, userCfg *config.Config) string {
+	if strings.TrimSpace(root) == "" {
+		if userCfg == nil {
+			return ""
+		}
+		return userCfg.CacheContext
+	}
+	proj := config.ProjectConfigPath(root)
+	if proj == "" {
+		return ""
+	}
+	pc, err := config.LoadForEditWithoutCredentialsReadOnlyStrict(proj)
+	if err != nil {
+		return ""
+	}
+	return pc.EffectiveCacheContext(root)
+}
+
+// SetCacheContext stores the per-project user attribution id. It is project
+// scoped by construction: it writes only to the active workspace's project
+// config (the project-local config) and refuses to run on a global (non-project)
+// tab, so the value can never leak into the user-global config.
+func (a *App) SetCacheContext(value string) error {
+	root := a.activeWorkspaceRoot()
+	if strings.TrimSpace(root) == "" {
+		return fmt.Errorf("cache context is only available in a project workspace")
+	}
+	projectPath := config.ProjectConfigPath(root)
+	if projectPath == "" {
+		return fmt.Errorf("cannot resolve a project config for this workspace")
+	}
+	if err := a.ensureActiveTabRebuildAllowed("cache context"); err != nil {
+		return err
+	}
+	if err := func() error {
+		unlock, err := config.LockConfigFileEdits(projectPath)
+		if err != nil {
+			return err
+		}
+		defer unlock()
+		cfg, err := config.LoadForEditWithoutCredentialsReadOnlyStrict(projectPath)
+		if err != nil {
+			return err
+		}
+		cfg.CacheContext = strings.TrimSpace(value)
+		return cfg.SaveTo(projectPath)
+	}(); err != nil {
+		return err
+	}
+	return a.rebuildSetting("cache context")
 }
 
 func (a *App) applyReasoningLanguageToLiveControllers(fallback string) {

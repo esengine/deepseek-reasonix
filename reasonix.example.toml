@@ -6,6 +6,7 @@
 
 default_model = "deepseek"   # a provider name (→ its default model) or "provider/model"
 # language      = "zh"   # ui language; empty = auto-detect from $LANG / $REASONIX_LANG
+# cachecontext = "my-project"   # per-workspace user attribution id; sent to providers as user_id (DeepSeek metadata.user_id / OpenAI user). Set it per project so shared provider entries stay global.
 
 [ui]
 theme = "auto"   # auto|dark|light; controls CLI colors only; REASONIX_THEME can override per run

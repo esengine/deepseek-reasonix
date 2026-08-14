@@ -1644,6 +1644,7 @@ function GeneralSection({ s, busy, apply, agentRunning }: SectionProps & { agent
   const t = useT();
   const closeBehavior = normalizeCloseBehavior(s.closeBehavior);
   const soundPanelId = useId();
+  const [cacheContextDraft, setCacheContextDraft] = useState(s.cacheContext ?? "");
   const languagePref = normalizeLangPref(s.desktopLanguage);
   const desktopCurrency = normalizeDesktopCurrency(s.desktopCurrency);
   const desktopLayoutStyle = normalizeDesktopLayoutStyle(s.desktopLayoutStyle);
@@ -1862,6 +1863,33 @@ function GeneralSection({ s, busy, apply, agentRunning }: SectionProps & { agent
         />
       </SettingsField>
     </SettingsSection>
+    {s.cacheContextProject && (
+      <SettingsSection title={t("settings.general.sectionProject")} description={t("settings.general.sectionProjectHint")}>
+        <SettingsField label={t("settings.cacheContext")} hint={t("settings.cacheContextHint")} icon={<KeyRound size={18} />}>
+          <div className="settings-inline-controls">
+            <input
+              className="mem-input set-grow"
+              placeholder="my-project"
+              value={cacheContextDraft}
+              disabled={busy}
+              onChange={(e) => setCacheContextDraft(e.target.value)}
+            />
+            <button
+              type="button"
+              className="btn btn--primary"
+              disabled={busy}
+              onClick={() => {
+                const value = cacheContextDraft.trim();
+                setCacheContextDraft(value);
+                void apply(() => app.SetCacheContext(value));
+              }}
+            >
+              {t("common.save")}
+            </button>
+          </div>
+        </SettingsField>
+      </SettingsSection>
+    )}
     </>
   );
 }

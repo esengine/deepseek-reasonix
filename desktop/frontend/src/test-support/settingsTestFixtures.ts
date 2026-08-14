@@ -113,6 +113,7 @@ export function baseSettings(displayMode: "standard" | "compact" = "standard"): 
     telemetry: true,
     metrics: true,
     configPath: "/tmp/reasonix/config.toml",
+    cacheContext: "",
     providerKinds: [],
     autoApproveTools: false,
     bypass: false,

@@ -390,6 +390,19 @@ Thinking 覆盖选项：
 | Disabled（关闭） | 对兼容 provider 发送 `thinking.type = "disabled"`。DeepSeek 风格 provider 下还会避免继续发送推理深度提示。 |
 | Adaptive（自适应） | 仅在服务文档明确支持 adaptive thinking 时使用，例如 MiniMax-M3 风格端点；语义是发送或保留 `thinking.type = "adaptive"`。 |
 
+## 按项目的用户 ID（`cachecontext`）
+
+为了让每个项目单独归属（DeepSeek 的 KV 缓存隔离 / 滥用追踪），请在项目级配置里设置顶层
+`cachecontext`，而不必重复 provider 条目。它会作为 DeepSeek `user_id` 发送（Anthropic 端点下是
+`metadata.user_id`，OpenAI 端点下是 `user`）：
+
+```toml
+cachecontext = "my-project"
+```
+
+该值必须匹配 `^[a-zA-Z0-9_-]+$`（不超过 512 个字符），否则 DeepSeek 会返回 HTTP 400。桌面端可在
+项目标签页的 **项目** 设置区里设置它，全局设置中不提供该字段。
+
 ## 快捷键
 
 这里按使用端来写，因为用户通常是先知道“我现在在桌面端/CLI”，再找对应按键。
@@ -544,8 +557,7 @@ Sandbox 是授权之后的第二层边界，不能替代命令解析，也不能
 仍然不能写出已批准的根目录。文件写工具
 （`write_file` / `edit_file` / `multi_edit` / `move_file`）拒绝 `[sandbox] workspace_root`
 之外的任何路径（默认当前目录，编辑不出项目），并解析符号链接与 `..`，使链接无法
-打洞越界。写出工作区时走交互式「扩展写入范围」审批（仅本次 / 本会话 / 写入项目
-`reasonix.toml` / 拒绝），不会退化成无沙箱执行。Bash 必须用 `additional_write_dirs`
+打洞越界。写出工作区时走交互式「扩展写入范围」审批（仅本次 / 本会话 / 写入项目本地配置 / 拒绝），不会退化成无沙箱执行。Bash 必须用 `additional_write_dirs`
 加上 `justification` 声明所需目录；宿主不会从命令文本猜测路径。无头 `reasonix run`
 不会弹审批：请传 `--add-dir` 或配置 `[sandbox].allow_write`。整个用户主目录可以在
 强警告后批准；文件系统根和 Reasonix 会话/状态目录不能通过动态流程批准。`forbid_read` 可选地隐藏敏感文件或目录，使 agent 的读文件、列目录和搜索工具不能读取或列出它们；

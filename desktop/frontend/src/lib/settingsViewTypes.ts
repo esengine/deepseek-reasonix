@@ -40,6 +40,8 @@ export interface SettingsView {
   metrics: boolean; // aggregate quality/lifecycle metrics (anonymous signal/bucket counts)
   configPath: string;
   shadowedByPath?: string; // workspace reasonix.toml that outranks configPath, when one exists
+  cacheContext: string; // per-project user attribution id sent to providers as user_id
+  cacheContextProject?: boolean; // true only when editing a project workspace (field hidden for global settings)
   providerKinds: string[]; // provider implementations the kernel registered (for the kind picker)
   autoApproveTools: boolean;
   bypass: boolean; // legacy JSON key for live YOLO/full-access tool auto-approval

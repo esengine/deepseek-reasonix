@@ -225,6 +225,9 @@ func resolveProviderCredentialsForRoot(root string, cfg *Config) {
 	resolver := NewCredentialResolverForRoot(root)
 	for i := range cfg.Providers {
 		resolveProviderCredentialWithResolver(&cfg.Providers[i], resolver)
+		// Stamp the workspace cachecontext onto every entry so a project-local
+		// value reaches providers regardless of which file defined them.
+		cfg.Providers[i].cacheContext = cfg.CacheContext
 	}
 }
 

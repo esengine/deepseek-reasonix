@@ -1494,6 +1494,71 @@ func TestNewProviderAppliesConfiguredDefaultEffort(t *testing.T) {
 	}
 }
 
+// Effect test for cachecontext: a project-local cachecontext must reach the
+// provider wire as user_id through the real boot assembly (shared provider
+// entry defined once in the user config).
+func TestNewProviderPropagatesProjectCacheContextAsUserID(t *testing.T) {
+	var gotReq map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotReq); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+
+	home := t.TempDir()
+	t.Setenv("REASONIX_HOME", home)
+	userCfg := `default_model = "gateway/m"
+
+[[providers]]
+name        = "gateway"
+kind        = "openai"
+base_url    = "` + srv.URL + `"
+model       = "m"
+api_key_env = "GATEWAY_API_KEY"
+`
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(userCfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+	if err := os.WriteFile(filepath.Join(project, "reasonix.toml"), []byte("cachecontext = \"proj-gamma\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.LoadForRoot(project)
+	if err != nil {
+		t.Fatalf("LoadForRoot: %v", err)
+	}
+	entry := &cfg.Providers[0]
+	if entry.Name != "gateway" {
+		t.Fatalf("provider = %q, want gateway", entry.Name)
+	}
+	if got := entry.CacheContextValue(); got != "proj-gamma" {
+		t.Fatalf("CacheContextValue = %q, want %q", got, "proj-gamma")
+	}
+
+	p, err := NewProvider(entry)
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	ch, err := p.Stream(context.Background(), provider.Request{
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	for chunk := range ch {
+		if chunk.Type == provider.ChunkError {
+			t.Fatalf("stream error: %v", chunk.Err)
+		}
+	}
+	if got := gotReq["user"]; got != "proj-gamma" {
+		t.Fatalf("wire user = %#v, want %q", got, "proj-gamma")
+	}
+}
+
 func TestNewProviderPreservesExplicitlySupportedKimiK3Efforts(t *testing.T) {
 	var gotReq map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

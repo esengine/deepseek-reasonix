@@ -469,6 +469,21 @@ extra_body  = { enable_thinking = true }
 fields such as `model`, `messages`, `tools`, `stream`, and `thinking` under its
 own control.
 
+## Per-project user id (`cachecontext`)
+
+To attribute each project separately (DeepSeek KV-cache isolation / abuse
+tracking), set the top-level `cachecontext` per project instead of repeating the
+provider entry. It is sent as the DeepSeek `user_id` (`metadata.user_id` on the
+Anthropic endpoint, `user` on the OpenAI endpoint):
+
+```toml
+cachecontext = "my-project"
+```
+
+The value must match `^[a-zA-Z0-9_-]+$` (≤512 chars); anything else makes
+DeepSeek return an HTTP 400. In the desktop app, set it in the **Project**
+settings section of the project tab — it is not exposed in global settings.
+
 ## Desktop hooks
 
 Desktop hooks run local commands at lifecycle events such as `SessionStart`,
@@ -684,7 +699,7 @@ the approved roots. The file-writers (`write_file` / `edit_file` / `multi_edit` 
 refuse any path outside `[sandbox] workspace_root` (default: the current dir, so
 edits stay in the project), resolving symlinks and `..` so a link can't tunnel
 out. Writing outside the workspace is an interactive *extend write access*
-approval (once / this session / add to project `reasonix.toml` / deny), not a
+approval (once / this session / add to the project-local config / deny), not a
 sandbox escape. Bash must name those directories with `additional_write_dirs`
 plus a `justification`; the host does not infer paths from the command text.
 Headless `reasonix run` does not prompt: pass `--add-dir` or configure

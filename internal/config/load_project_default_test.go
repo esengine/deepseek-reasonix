@@ -15,6 +15,68 @@ func writeProjectDefaultTestConfig(t *testing.T, dir, name, body string) string 
 	return path
 }
 
+// A provider defined once in the user-global config must carry the workspace's
+// cachecontext, so projects can vary their DeepSeek user_id without repeating
+// the provider entry per project.
+func TestLoadForRoot_ProjectCacheContextPropagatesToSharedProviders(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("REASONIX_HOME", home)
+	writeProjectDefaultTestConfig(t, home, "config.toml", `default_model = "deepseek-pro"
+
+[[providers]]
+name        = "deepseek-pro"
+kind        = "anthropic"
+base_url    = "https://api.deepseek.com/anthropic"
+model       = "deepseek-v4-pro"
+api_key_env = "DEEPSEEK_API_KEY"
+`)
+
+	project := t.TempDir()
+	writeProjectDefaultTestConfig(t, project, "reasonix.toml", `cachecontext = "proj-alpha"
+`)
+
+	cfg, err := LoadForRoot(project)
+	if err != nil {
+		t.Fatalf("LoadForRoot: %v", err)
+	}
+	if cfg.CacheContext != "proj-alpha" {
+		t.Fatalf("CacheContext = %q, want %q", cfg.CacheContext, "proj-alpha")
+	}
+	if len(cfg.Providers) != 1 {
+		t.Fatalf("providers = %d, want 1", len(cfg.Providers))
+	}
+	if got := cfg.Providers[0].CacheContextValue(); got != "proj-alpha" {
+		t.Fatalf("shared provider CacheContextValue = %q, want %q", got, "proj-alpha")
+	}
+}
+
+// A workspace with no cachecontext must leave provider entries empty so no
+// spurious user_id is emitted.
+func TestLoadForRoot_NoCacheContextStaysEmpty(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("REASONIX_HOME", home)
+	writeProjectDefaultTestConfig(t, home, "config.toml", `default_model = "deepseek-pro"
+
+[[providers]]
+name        = "deepseek-pro"
+kind        = "anthropic"
+base_url    = "https://api.deepseek.com/anthropic"
+model       = "deepseek-v4-pro"
+api_key_env = "DEEPSEEK_API_KEY"
+`)
+
+	cfg, err := LoadForRoot(t.TempDir())
+	if err != nil {
+		t.Fatalf("LoadForRoot: %v", err)
+	}
+	if cfg.CacheContext != "" {
+		t.Fatalf("CacheContext = %q, want empty", cfg.CacheContext)
+	}
+	if got := cfg.Providers[0].CacheContextValue(); got != "" {
+		t.Fatalf("provider CacheContextValue = %q, want empty", got)
+	}
+}
+
 // #4218: pre-v1.11 persistence paths full-rendered ./reasonix.toml and pinned
 // the built-in default_model ("deepseek-flash") into it. Once the user's
 // [[providers]] replaced the built-in presets, that stale name resolved to

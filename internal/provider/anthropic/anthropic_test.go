@@ -999,4 +999,100 @@ data: {"type":"message_stop"}
 	}
 }
 
+// TestStreamSendsMetadataUserID guards the cachecontext wiring: the workspace
+// user attribution id must reach DeepSeek as metadata.user_id on the Anthropic
+// wire and stay absent when unset.
+func TestStreamSendsMetadataUserID(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, `event: message_start
+data: {"type":"message_start","message":{"usage":{"input_tokens":2,"output_tokens":0}}}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}
+
+event: message_stop
+data: {"type":"message_stop"}
+
+`)
+	}))
+	defer srv.Close()
+
+	p, err := New(provider.Config{
+		Name:    "deepseek",
+		BaseURL: srv.URL,
+		Model:   "deepseek-v4-flash",
+		APIKey:  "sk-test",
+		Extra:   map[string]any{"user_id": "proj-a"},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ch, err := p.Stream(context.Background(), provider.Request{
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	for chunk := range ch {
+		if chunk.Type == provider.ChunkError {
+			t.Fatalf("stream error: %v", chunk.Err)
+		}
+	}
+
+	meta, ok := body["metadata"].(map[string]any)
+	if !ok || meta["user_id"] != "proj-a" {
+		t.Fatalf("metadata = %#v, want user_id %q", body["metadata"], "proj-a")
+	}
+}
+
+// TestStreamOmitsMetadataUserIDWhenUnset ensures a bare provider does not send
+// a spurious empty metadata block.
+func TestStreamOmitsMetadataUserIDWhenUnset(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		var body map[string]any
+		_ = json.Unmarshal(raw, &body)
+		if _, ok := body["metadata"]; ok {
+			t.Errorf("metadata present when user_id unset: %#v", body["metadata"])
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, `event: message_start
+data: {"type":"message_start","message":{"usage":{"input_tokens":2,"output_tokens":0}}}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}
+
+event: message_stop
+data: {"type":"message_stop"}
+
+`)
+	}))
+	defer srv.Close()
+
+	p, err := New(provider.Config{
+		Name:    "deepseek",
+		BaseURL: srv.URL,
+		Model:   "deepseek-v4-flash",
+		APIKey:  "sk-test",
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ch, err := p.Stream(context.Background(), provider.Request{
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	for chunk := range ch {
+		if chunk.Type == provider.ChunkError {
+			t.Fatalf("stream error: %v", chunk.Err)
+		}
+	}
+}
+
 // Ensure the package wires into the registry under the expected kind.
