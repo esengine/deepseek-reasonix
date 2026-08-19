@@ -1,6 +1,6 @@
 # Reasonix configuration.
 # Resolution order: flag > ./reasonix.toml > <Reasonix home>/config.toml > built-in defaults.
-# Fields marked user/global only are not overridden by ./reasonix.toml.
+# Fields marked user/global only are not overridden by the project-local config.
 # Provider entries name secrets via api_key_env; saved key values live in
 # Reasonix's global <Reasonix home>/.env. Never put API key values here.
 

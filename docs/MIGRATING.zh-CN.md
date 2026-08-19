@@ -40,10 +40,10 @@ cd DeepSeek-Reasonix && make build                        # -> bin/reasonix(.exe
 
 | 旧版 | Reasonix 1.0 |
 | --- | --- |
-| TypeScript 配置文件 | 项目使用 `reasonix.toml`；从 v1.8.1 起，全局配置为 Reasonix home 下的 `config.toml`（macOS/Linux：`~/.reasonix/`；Windows：`%AppData%\reasonix\`）。参见 `reasonix.example.toml` 和[配置路径](./CONFIG_PATHS.zh-CN.md) |
+| TypeScript 配置文件 | 项目使用项目本地配置；从 v1.8.1 起，全局配置为 Reasonix home 下的 `config.toml`（macOS/Linux：`~/.reasonix/`；Windows：`%AppData%\reasonix\`）。参见 `reasonix.example.toml` 和[配置路径](./CONFIG_PATHS.zh-CN.md) |
 | 环境变量 / API key | provider 配置保留 `api_key_env`；保存的 key 位于 Reasonix home 的 `.env`（`DEEPSEEK_API_KEY`、`MIMO_API_KEY` 等） |
 | 项目记忆 | `REASONIX.md`（含自动记忆），兼容 Claude Code |
-| MCP server | 在 `reasonix.toml` 中使用 `[[plugins]]`，或直接读取 Claude Code 的 `.mcp.json` |
+| MCP server | 在项目本地配置中使用 `[[plugins]]`，或直接读取 Claude Code 的 `.mcp.json` |
 
 首次启动时，v1.8.1+ 会执行一次非破坏性导入。它会读取以下旧配置：
 
@@ -120,7 +120,7 @@ agent 核心延续了原有能力：循环、读写编辑与 glob/grep/bash 等�
 - **代码智能**：Go 重写版通过 LSP 辅助代码读取，并结合 `grep`、`read_file` 和 `glob` 理解本地代码。v1 的语义搜索与 tree-sitter 符号索引尚未移植，CodeGraph 也不再以内置 MCP server 形式提供。
 - **Plan 模式**：新增 `complete_step`，用于基于证据确认步骤完成。
 - **MCP 项目身份与 schema 缓存 URL 感知凭据**：userinfo 和 token/api_key/password 等查询值不会进入项目运行身份摘要或 schema 缓存键，因此轮换凭据不会改变项目运行时/缓存身份。用户安装的 server 不计算项目身份摘要；已配置 MCP 不再需要旧的启动或逐工具授权回执。
-- **MCP 添加后即可使用**：用户通过桌面端、CLI、全局配置、旧配置导入或主动安装插件包添加的 server 默认可信，全局安装统一写入 `config.toml`。仓库内 `reasonix.toml` / `.mcp.json` 声明保留在项目中，同样无需额外启动确认。同名时项目覆盖全局，项目内部 `reasonix.toml` 高于 `.mcp.json`。打开陌生仓库等同于接受其中可执行的项目配置；启动 Reasonix 前应检查 `.reasonix/settings.json`、`reasonix.toml` 和 `.mcp.json`。如果仓库引发异常的 MCP 或 Hooks 行为，可用安全模式重新启动，在恢复期间禁用这些外部集成。
+- **MCP 添加后即可使用**：用户通过桌面端、CLI、全局配置、旧配置导入或主动安装插件包添加的 server 默认可信，全局安装统一写入 `config.toml`。仓库内项目本地配置 / `.mcp.json` 声明保留在项目中，同样无需额外启动确认。同名时项目覆盖全局，项目内部项目本地配置高于 `.mcp.json`。打开陌生仓库等同于接受其中可执行的项目配置；启动 Reasonix 前应检查 `.reasonix/settings.json`、项目本地配置和 `.mcp.json`。如果仓库引发异常的 MCP 或 Hooks 行为，可用安全模式重新启动，在恢复期间禁用这些外部集成。
 - **stdio MCP 连接持久化**：writer 调用不再创建新进程，浏览器或会话类 server 的状态可以保留。
 - **Plan 与权限策略相互独立**：普通内置工具和 Bash 仍遵循 Ask/Auto/YOLO 与 Sandbox；已安装或代理解析的 MCP 写入/破坏性工具，以及来自未授权 server 的读取工具，在整个规划阶段保持阻止。`complete_step` 等执行阶段工具也要等计划获批后才能使用。
 - `plan_mode_read_only_commands` 仍可解析和保存，以兼容旧配置，但不再决定主 Plan 流程能否调用工具。安装或通过项目配置声明 MCP server 后，其非破坏性的 `readOnlyHint` 工具会自动进入 planner 与只读子智能体，不需要逐工具信任配置。
