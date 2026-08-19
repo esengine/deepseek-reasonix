@@ -48,7 +48,12 @@ type Config struct {
 	CredentialsStore string `toml:"credentials_store"`
 	// CacheContext is a per-workspace user attribution id (DeepSeek user_id /
 	// OpenAI user); project config sets it so shared providers need not repeat.
-	CacheContext  string              `toml:"cachecontext"`
+	CacheContext string `toml:"cachecontext"`
+	// LogName and User both override the username in the auto cachecontext
+	// default (repo config wins over user-global, then $LOGNAME, then the
+	// system account). logname prevails when both are set; see loadForRoot.
+	LogName       string              `toml:"logname"`
+	User          string              `toml:"user"`
 	UI            UIConfig            `toml:"ui"`
 	CLI           CLIConfig           `toml:"cli"`
 	Desktop       DesktopConfig       `toml:"desktop"`

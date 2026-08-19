@@ -1559,6 +1559,70 @@ api_key_env = "GATEWAY_API_KEY"
 	}
 }
 
+// Effect test for the auto cachecontext default: a workspace that configures no
+// cachecontext must still emit "<user>:<repo-path>" as user_id on the wire,
+// honoring the $LOGNAME username override.
+func TestNewProviderSendsAutoCacheContextWhenUnset(t *testing.T) {
+	t.Setenv("LOGNAME", "wire-user")
+	var gotReq map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotReq); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+
+	home := t.TempDir()
+	t.Setenv("REASONIX_HOME", home)
+	userCfg := `default_model = "gateway/m"
+
+[[providers]]
+name        = "gateway"
+kind        = "openai"
+base_url    = "` + srv.URL + `"
+model       = "m"
+api_key_env = "GATEWAY_API_KEY"
+`
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(userCfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+
+	cfg, err := config.LoadForRoot(project)
+	if err != nil {
+		t.Fatalf("LoadForRoot: %v", err)
+	}
+	entry := &cfg.Providers[0]
+	if entry.Name != "gateway" {
+		t.Fatalf("provider = %q, want gateway", entry.Name)
+	}
+	want := cfg.EffectiveCacheContext(project)
+	if want == "" {
+		t.Fatal("auto cachecontext default is empty")
+	}
+
+	p, err := NewProvider(entry)
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	ch, err := p.Stream(context.Background(), provider.Request{
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	for chunk := range ch {
+		if chunk.Type == provider.ChunkError {
+			t.Fatalf("stream error: %v", chunk.Err)
+		}
+	}
+	if got := gotReq["user"]; got != want {
+		t.Fatalf("wire user = %#v, want auto %q", got, want)
+	}
+}
+
 func TestNewProviderPreservesExplicitlySupportedKimiK3Efforts(t *testing.T) {
 	var gotReq map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -243,6 +243,9 @@ func loadForRoot(root string, opts loadForRootOptions) (*Config, error) {
 	cfg.CredentialsStore = credentialsStoreMode()
 	cfg.setExpansionEnv(expansionEnv)
 	if opts.loadCredentials {
+		if cfg.LogName != "" && cfg.User != "" {
+			cfg.addLoadWarning("both logname and user are set; logname wins for the auto cachecontext")
+		}
 		resolveProviderCredentialsForRoot(root, cfg)
 	}
 	return cfg, nil

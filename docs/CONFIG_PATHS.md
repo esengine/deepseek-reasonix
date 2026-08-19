@@ -190,7 +190,21 @@ cachecontext = "my-project"
 ```
 
 The value should match `^[a-zA-Z0-9_-]+$` and be at most 512 characters; a
-mismatch returns an HTTP 400 from DeepSeek. Leave it unset to send no id.
+mismatch returns an HTTP 400 from DeepSeek.
+
+If `cachecontext` is left unset, Reasonix derives an auto value from
+`<unix-user>:<repo-path>` (e.g. `alice:/home/alice/my-project`), sanitized to the
+same `^[a-zA-Z0-9_-]+$` rule — so an id is still sent. Over-long paths keep the
+`<user>-` prefix and the path tail, hashing the overflowing middle so the value
+never exceeds 512 characters. The auto value is never written to a config file.
+
+### `logname` / `user` (auto-default username)
+
+The username used in that auto default resolves in this priority order: a
+repo-local `logname`, then a user-global `logname`, then `user` (an older alias
+for `logname`), then the `$LOGNAME` environment variable, then the system
+account. If both `logname` and `user` are set, `logname` prevails and a load
+warning is recorded.
 
 In the desktop app, the **Project** settings section on the project tab exposes
 this field and saves it to the workspace's project-local config. It is intentionally

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -50,9 +51,10 @@ api_key_env = "DEEPSEEK_API_KEY"
 	}
 }
 
-// A workspace with no cachecontext must leave provider entries empty so no
-// spurious user_id is emitted.
-func TestLoadForRoot_NoCacheContextStaysEmpty(t *testing.T) {
+// A workspace with no cachecontext falls back to the auto "<unix-user>:<repo>"
+// default on the provider wire, while the config field itself stays empty so
+// the machine-specific value is never persisted or rendered.
+func TestLoadForRoot_NoCacheContextGetsAutoDefault(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("REASONIX_HOME", home)
 	writeProjectDefaultTestConfig(t, home, "config.toml", `default_model = "deepseek-pro"
@@ -65,15 +67,131 @@ model       = "deepseek-v4-pro"
 api_key_env = "DEEPSEEK_API_KEY"
 `)
 
-	cfg, err := LoadForRoot(t.TempDir())
+	project := t.TempDir()
+	cfg, err := LoadForRoot(project)
 	if err != nil {
 		t.Fatalf("LoadForRoot: %v", err)
 	}
 	if cfg.CacheContext != "" {
-		t.Fatalf("CacheContext = %q, want empty", cfg.CacheContext)
+		t.Fatalf("CacheContext = %q, want empty (default kept off the config field)", cfg.CacheContext)
 	}
-	if got := cfg.Providers[0].CacheContextValue(); got != "" {
-		t.Fatalf("provider CacheContextValue = %q, want empty", got)
+	want := BuildCacheContext(cfg.cacheContextUser(), project)
+	if got := cfg.Providers[0].CacheContextValue(); got != want {
+		t.Fatalf("provider CacheContextValue = %q, want auto default %q", got, want)
+	}
+}
+
+// A user-global logname feeds the auto cachecontext default so a username can
+// be pinned without repeating it per project.
+func TestLoadForRoot_GlobalLogNameFeedsAutoCacheContext(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("REASONIX_HOME", home)
+	writeProjectDefaultTestConfig(t, home, "config.toml", `default_model = "deepseek-pro"
+logname = "global-user"
+
+[[providers]]
+name        = "deepseek-pro"
+kind        = "anthropic"
+base_url    = "https://api.deepseek.com/anthropic"
+model       = "deepseek-v4-pro"
+api_key_env = "DEEPSEEK_API_KEY"
+`)
+
+	project := t.TempDir()
+	cfg, err := LoadForRoot(project)
+	if err != nil {
+		t.Fatalf("LoadForRoot: %v", err)
+	}
+	if want := BuildCacheContext("global-user", project); cfg.Providers[0].CacheContextValue() != want {
+		t.Fatalf("CacheContextValue = %q, want %q", cfg.Providers[0].CacheContextValue(), want)
+	}
+}
+
+// A repo-local logname overrides the user-global one for the auto cachecontext.
+func TestLoadForRoot_ProjectLogNameOverridesGlobal(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("REASONIX_HOME", home)
+	writeProjectDefaultTestConfig(t, home, "config.toml", `default_model = "deepseek-pro"
+logname = "global-user"
+
+[[providers]]
+name        = "deepseek-pro"
+kind        = "anthropic"
+base_url    = "https://api.deepseek.com/anthropic"
+model       = "deepseek-v4-pro"
+api_key_env = "DEEPSEEK_API_KEY"
+`)
+
+	project := t.TempDir()
+	writeProjectDefaultTestConfig(t, project, "reasonix.toml", "logname = \"repo-user\"\n")
+
+	cfg, err := LoadForRoot(project)
+	if err != nil {
+		t.Fatalf("LoadForRoot: %v", err)
+	}
+	if want := BuildCacheContext("repo-user", project); cfg.Providers[0].CacheContextValue() != want {
+		t.Fatalf("CacheContextValue = %q, want %q", cfg.Providers[0].CacheContextValue(), want)
+	}
+}
+
+// Both logname and user set: a warning is recorded and logname prevails on the
+// auto cachecontext.
+func TestLoadForRoot_BothLogNameAndUserWarnsAndLogNamePrevails(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("REASONIX_HOME", home)
+	writeProjectDefaultTestConfig(t, home, "config.toml", `default_model = "deepseek-pro"
+logname = "log-user"
+user = "plain-user"
+
+[[providers]]
+name        = "deepseek-pro"
+kind        = "anthropic"
+base_url    = "https://api.deepseek.com/anthropic"
+model       = "deepseek-v4-pro"
+api_key_env = "DEEPSEEK_API_KEY"
+`)
+
+	project := t.TempDir()
+	cfg, err := LoadForRoot(project)
+	if err != nil {
+		t.Fatalf("LoadForRoot: %v", err)
+	}
+	if want := BuildCacheContext("log-user", project); cfg.Providers[0].CacheContextValue() != want {
+		t.Fatalf("CacheContextValue = %q, want logname to prevail %q", cfg.Providers[0].CacheContextValue(), want)
+	}
+	warned := false
+	for _, w := range cfg.LoadWarnings() {
+		if strings.Contains(w, "logname and user") {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Fatalf("expected a load warning when both logname and user are set")
+	}
+}
+
+// A user-global `user` (older alias) also feeds the auto cachecontext default.
+func TestLoadForRoot_UserFeedsAutoCacheContext(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("REASONIX_HOME", home)
+	writeProjectDefaultTestConfig(t, home, "config.toml", `default_model = "deepseek-pro"
+user = "plain-user"
+
+[[providers]]
+name        = "deepseek-pro"
+kind        = "anthropic"
+base_url    = "https://api.deepseek.com/anthropic"
+model       = "deepseek-v4-pro"
+api_key_env = "DEEPSEEK_API_KEY"
+`)
+
+	project := t.TempDir()
+	cfg, err := LoadForRoot(project)
+	if err != nil {
+		t.Fatalf("LoadForRoot: %v", err)
+	}
+	if want := BuildCacheContext("plain-user", project); cfg.Providers[0].CacheContextValue() != want {
+		t.Fatalf("CacheContextValue = %q, want %q", cfg.Providers[0].CacheContextValue(), want)
 	}
 }
 

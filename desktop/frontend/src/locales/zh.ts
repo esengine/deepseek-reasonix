@@ -2527,7 +2527,7 @@ export const zh: Record<DictKey, string> = {
   "settings.general.sectionProject": "项目",
   "settings.general.sectionProjectHint": "仅适用于此项目的设置，保存到工作区的项目本地配置。",
   "settings.cacheContext": "缓存上下文（用户 ID）",
-  "settings.cacheContextHint": "可选。发送给提供商的按项目标识符，作为 DeepSeek user_id / OpenAI user 字段。它按项目分组 KV 缓存与用量归属。仅使用字母、数字、\"_\" 或 \"-\"，不超过 512 个字符。留空则不发送。",
+  "settings.cacheContextHint": "可选。发送给提供商的按项目标识符，作为 DeepSeek user_id / OpenAI user 字段。它按项目分组 KV 缓存与用量归属。仅使用字母、数字、\"_\" 或 \"-\"，不超过 512 个字符。留空则自动推导一个 id。",
   "settings.pageDesc.model-stats": "查看模型调用量与费用统计。",
   "settings.pageDesc.models": "默认模型、规划模型与运行上限。",
   "settings.pageDesc.providers": "管理模型供应商、API 地址、密钥与可用模型。",

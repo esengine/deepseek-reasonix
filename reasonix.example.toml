@@ -6,7 +6,9 @@
 
 default_model = "deepseek"   # a provider name (→ its default model) or "provider/model"
 # language      = "zh"   # ui language; empty = auto-detect from $LANG / $REASONIX_LANG
-# cachecontext = "my-project"   # per-workspace user attribution id; sent to providers as user_id (DeepSeek metadata.user_id / OpenAI user). Set it per project so shared provider entries stay global.
+# cachecontext = "my-project"   # per-workspace user attribution id; sent to providers as user_id (DeepSeek metadata.user_id / OpenAI user). Set it per project so shared provider entries stay global. When unset, an auto "<unix-user>:<repo-path>" value is derived.
+# logname = "alice"   # override the username in the auto cachecontext default; repo config wins over this user-global value, then $LOGNAME, then the system account.
+# user = "alice"   # alternative to logname (older name); logname wins if both are set and a warning is logged.
 
 [ui]
 theme = "auto"   # auto|dark|light; controls CLI colors only; REASONIX_THEME can override per run

@@ -2520,7 +2520,7 @@ export const en = {
   "settings.general.sectionProject": "Project",
   "settings.general.sectionProjectHint": "Settings that apply only to this project, saved to the workspace's project-local config.",
   "settings.cacheContext": "Cache context (user id)",
-  "settings.cacheContextHint": "Optional. A per-project identifier sent to providers as the DeepSeek user_id / OpenAI user field. It groups KV-cache and usage attribution for this project. Use letters, digits, \"_\" or \"-\", up to 512 characters. Leave empty to send no id.",
+  "settings.cacheContextHint": "Optional. A per-project identifier sent to providers as the DeepSeek user_id / OpenAI user field. It groups KV-cache and usage attribution for this project. Use letters, digits, \"_\" or \"-\", up to 512 characters. Leave empty to derive an id automatically.",
   "settings.pageDesc.model-stats": "Review model usage and costs.",
   "settings.pageDesc.models": "Default models, planning models, and runtime limits.",
   "settings.pageDesc.providers": "Manage model providers, API endpoints, keys, and available models.",

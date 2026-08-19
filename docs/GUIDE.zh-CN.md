@@ -403,6 +403,16 @@ cachecontext = "my-project"
 该值必须匹配 `^[a-zA-Z0-9_-]+$`（不超过 512 个字符），否则 DeepSeek 会返回 HTTP 400。桌面端可在
 项目标签页的 **项目** 设置区里设置它，全局设置中不提供该字段。
 
+当某个工作区未设置 `cachecontext` 时，Reasonix 会从 `<unix-user>:<repo-path>` 发送一个自动推导的值
+（例如 `alice:/home/alice/my-project`），并按同样的 `^[a-zA-Z0-9_-]+$` 规则清洗，因此实际发送的 id 是
+`alice--home-alice-my-project`。超长路径会保留 `<user>-` 前缀与路径尾部，并对超出的中间部分做哈希，
+使值始终不超过 512 个字符。该自动值不会写入任何配置文件——只出现在 provider 请求中——因此只有显式
+设置 `cachecontext` 才能固定它。
+
+自动值中的用户名按以下优先级解析：仓库本地 `logname`（项目本地配置）、用户全局 `logname`（全局配置）、`user`
+（`logname` 的旧别名）、`$LOGNAME` 环境变量、系统账户。若 `logname` 与 `user` 同时设置，
+`logname` 生效并记录一条加载警告。
+
 ## 快捷键
 
 这里按使用端来写，因为用户通常是先知道“我现在在桌面端/CLI”，再找对应按键。
