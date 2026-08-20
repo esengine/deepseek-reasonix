@@ -639,14 +639,53 @@ func SourcePath() string {
 	return SourcePathForRoot(".")
 }
 
+// Project config files. The standard location is <root>/.reasonix/config.toml,
+// mirroring the global <home>/.reasonix/config.toml. Legacy <root>/reasonix.toml
+// wins when present, so existing repositories keep working. New files are only
+// ever created at <root>/.reasonix/config.toml.
+const (
+	projectConfigFile  = "reasonix.toml"
+	projectConfigLocal = ".reasonix" + string(filepath.Separator) + "config.toml"
+)
+
+// projectConfigCandidates returns the legacy plain and standard local project
+// config paths for a resolved root.
+func projectConfigCandidates(root string) (plain, local string) {
+	root = resolveRoot(root)
+	plain, local = projectConfigFile, projectConfigLocal
+	if root != "." {
+		plain = filepath.Join(root, projectConfigFile)
+		local = filepath.Join(root, projectConfigLocal)
+	}
+	return plain, local
+}
+
+// ProjectConfigPath returns the project config file for root. <root>/reasonix.toml
+// (legacy) wins when present; otherwise the standard <root>/.reasonix/config.toml.
+// When none exists it returns .reasonix/config.toml, the creation default.
+func ProjectConfigPath(root string) string {
+	plain, local := projectConfigCandidates(root)
+	if _, err := os.Lstat(plain); err == nil {
+		return plain
+	}
+	return local
+}
+
+// bothProjectConfigsExist reports whether root holds both the legacy plain
+// reasonix.toml and the standard .reasonix/config.toml, i.e. the ambiguous
+// case where the plain file wins.
+func bothProjectConfigsExist(root string) bool {
+	plain, local := projectConfigCandidates(root)
+	_, plainErr := os.Lstat(plain)
+	_, localErr := os.Lstat(local)
+	return plainErr == nil && localErr == nil
+}
+
 // SourcePathForRoot returns the highest-priority config file that exists under
 // root, or "" if none. Equivalent to SourcePath() when root is ".".
 func SourcePathForRoot(root string) string {
 	root = resolveRoot(root)
-	projectTOML := "reasonix.toml"
-	if root != "." {
-		projectTOML = filepath.Join(root, "reasonix.toml")
-	}
+	projectTOML := ProjectConfigPath(root)
 	if _, err := os.Stat(projectTOML); err == nil {
 		return projectTOML
 	}
@@ -656,4 +695,20 @@ func SourcePathForRoot(root string) string {
 		}
 	}
 	return ""
+}
+
+// IsProjectConfigFile reports whether path is a recognized project config file:
+// <root>/reasonix.toml or <root>/.reasonix/config.toml. The user-global
+// <home>/.reasonix/config.toml is excluded.
+func IsProjectConfigFile(path string) bool {
+	if path == "" || path == userConfigPath() || path == legacyUserConfigPath() {
+		return false
+	}
+	switch filepath.Base(path) {
+	case "reasonix.toml":
+		return true
+	case "config.toml":
+		return filepath.Base(filepath.Dir(path)) == ".reasonix"
+	}
+	return false
 }
