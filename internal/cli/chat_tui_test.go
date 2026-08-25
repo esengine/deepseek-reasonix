@@ -1594,7 +1594,11 @@ func TestInsertNewlineKeyBinding(t *testing.T) {
 	}
 }
 
-func TestCtrlHomeEndScrollKeyBindings(t *testing.T) {
+// newScrolledChatTUI returns a chatTUI whose transcript has been overflown with
+// `lines` notice lines at the given viewport `height`, plus an adv wrapper that
+// sends one message. Used by the transcript scroll-behaviour tests.
+func newScrolledChatTUI(t *testing.T, height, lines int) (chatTUI, func(chatTUI, tea.Msg) chatTUI) {
+	t.Helper()
 	ctrl := control.New(control.Options{})
 	ch := make(chan event.Event, 1)
 	notice := agentEventMsg(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "line"})
@@ -1602,11 +1606,15 @@ func TestCtrlHomeEndScrollKeyBindings(t *testing.T) {
 		n, _ := m.Update(msg)
 		return n.(chatTUI)
 	}
-
-	cur := adv(newChatTUI(ctrl, "", ch, 80), tea.WindowSizeMsg{Width: 80, Height: 8})
-	for range 12 {
+	cur := adv(newChatTUI(ctrl, "", ch, 80), tea.WindowSizeMsg{Width: 80, Height: height})
+	for range lines {
 		cur = adv(cur, notice)
 	}
+	return cur, adv
+}
+
+func TestCtrlHomeEndScrollKeyBindings(t *testing.T) {
+	cur, adv := newScrolledChatTUI(t, 8, 12)
 	// Viewport should be at the bottom after output.
 	if !cur.viewport.AtBottom() {
 		t.Fatal("viewport should start at the bottom after streaming output")
@@ -1670,18 +1678,7 @@ func TestMouseWheelAndPageKeysScrollTranscript(t *testing.T) {
 }
 
 func TestRunningStreamPreservesScrolledReadingPosition(t *testing.T) {
-	ctrl := control.New(control.Options{})
-	ch := make(chan event.Event, 1)
-	notice := agentEventMsg(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "line"})
-	adv := func(m chatTUI, msg tea.Msg) chatTUI {
-		n, _ := m.Update(msg)
-		return n.(chatTUI)
-	}
-
-	cur := adv(newChatTUI(ctrl, "", ch, 80), tea.WindowSizeMsg{Width: 80, Height: 10})
-	for range 40 {
-		cur = adv(cur, notice)
-	}
+	cur, adv := newScrolledChatTUI(t, 10, 40)
 	cur.state = tuiRunning
 	cur = adv(cur, tea.MouseWheelMsg{Button: tea.MouseWheelUp})
 	readOffset := cur.viewport.YOffset()
@@ -1707,18 +1704,7 @@ func TestRunningStreamPreservesScrolledReadingPosition(t *testing.T) {
 }
 
 func TestTranscriptScrollbarClickAndDrag(t *testing.T) {
-	ctrl := control.New(control.Options{})
-	ch := make(chan event.Event, 1)
-	notice := agentEventMsg(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "line"})
-	adv := func(m chatTUI, msg tea.Msg) chatTUI {
-		n, _ := m.Update(msg)
-		return n.(chatTUI)
-	}
-
-	cur := adv(newChatTUI(ctrl, "", ch, 80), tea.WindowSizeMsg{Width: 80, Height: 10})
-	for range 40 {
-		cur = adv(cur, notice)
-	}
+	cur, adv := newScrolledChatTUI(t, 10, 40)
 	cur.viewport.GotoTop()
 	barX := cur.viewport.Width()
 	bottomRow := cur.viewport.Height() - 1
@@ -3051,17 +3037,7 @@ func TestViewTermuxUsesNativeScrollback(t *testing.T) {
 // TestTranscriptTailFollow proves the viewport pins to newest output while the
 // user is at the bottom, and stops yanking once the user scrolls up.
 func TestTranscriptTailFollow(t *testing.T) {
-	ctrl := control.New(control.Options{})
-	adv := func(m chatTUI, msg tea.Msg) chatTUI {
-		n, _ := m.Update(msg)
-		return n.(chatTUI)
-	}
-	notice := agentEventMsg(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "line"})
-
-	cur := adv(newChatTUI(ctrl, "", make(chan event.Event, 1), 80), tea.WindowSizeMsg{Width: 80, Height: 8})
-	for range 12 { // overflow the short viewport so there's room to scroll
-		cur = adv(cur, notice)
-	}
+	cur, adv := newScrolledChatTUI(t, 8, 12)
 	if !cur.viewport.AtBottom() {
 		t.Fatal("new output while pinned should keep the viewport at the bottom")
 	}
@@ -3071,7 +3047,7 @@ func TestTranscriptTailFollow(t *testing.T) {
 		t.Fatal("wheel-up should break the bottom pin")
 	}
 
-	cur = adv(cur, notice)
+	cur = adv(cur, agentEventMsg(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "line"}))
 	if cur.viewport.AtBottom() {
 		t.Error("new output while scrolled up must preserve the reading position")
 	}
@@ -3081,20 +3057,9 @@ func TestTranscriptTailFollow(t *testing.T) {
 // scrolls the viewport to the bottom in both idle and running states, so the user
 // can quickly tail-follow after scrolling up to read history.
 func TestEmptyEnterScrollsToBottom(t *testing.T) {
-	ctrl := control.New(control.Options{})
-	ch := make(chan event.Event, 1)
-	notice := agentEventMsg(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "line"})
-	adv := func(m chatTUI, msg tea.Msg) chatTUI {
-		n, _ := m.Update(msg)
-		return n.(chatTUI)
-	}
-
 	// idle state
 	t.Run("idle", func(t *testing.T) {
-		cur := adv(newChatTUI(ctrl, "", ch, 80), tea.WindowSizeMsg{Width: 80, Height: 8})
-		for range 12 {
-			cur = adv(cur, notice)
-		}
+		cur, adv := newScrolledChatTUI(t, 8, 12)
 		// Scroll up to leave the bottom.
 		cur = adv(cur, tea.MouseWheelMsg{Button: tea.MouseWheelUp})
 		if cur.viewport.AtBottom() {
@@ -3109,10 +3074,7 @@ func TestEmptyEnterScrollsToBottom(t *testing.T) {
 
 	// running state
 	t.Run("running", func(t *testing.T) {
-		cur := adv(newChatTUI(ctrl, "", ch, 80), tea.WindowSizeMsg{Width: 80, Height: 8})
-		for range 12 {
-			cur = adv(cur, notice)
-		}
+		cur, adv := newScrolledChatTUI(t, 8, 12)
 		cur.state = tuiRunning
 		cur = adv(cur, tea.MouseWheelMsg{Button: tea.MouseWheelUp})
 		if cur.viewport.AtBottom() {
@@ -3125,12 +3087,11 @@ func TestEmptyEnterScrollsToBottom(t *testing.T) {
 	})
 }
 
-// TestForceGotoBottomScrollsWithoutTranscriptChange keeps the force-bottom
-// contract independent from transcript length, width, or dirty-state changes.
-func TestForceGotoBottomScrollsWithoutTranscriptChange(t *testing.T) {
-	ctrl := control.New(control.Options{})
-	ch := make(chan event.Event, 1)
-	notice := agentEventMsg(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "line"})
+// newScrolledCmdChatTUI behaves like newScrolledChatTUI for the -{Height:8,
+// lines:12} variant but also exposes a cmd-returning adv plus a next wrapper,
+// for tests that must inspect the returned command after an Update.
+func newScrolledCmdChatTUI(t *testing.T) (chatTUI, func(chatTUI, tea.Msg) (chatTUI, tea.Cmd), func(chatTUI, tea.Msg) chatTUI) {
+	cur, _ := newScrolledChatTUI(t, 8, 12)
 	adv := func(m chatTUI, msg tea.Msg) (chatTUI, tea.Cmd) {
 		n, cmd := m.Update(msg)
 		return n.(chatTUI), cmd
@@ -3139,10 +3100,13 @@ func TestForceGotoBottomScrollsWithoutTranscriptChange(t *testing.T) {
 		n, _ := adv(m, msg)
 		return n
 	}
-	cur := next(newChatTUI(ctrl, "", ch, 80), tea.WindowSizeMsg{Width: 80, Height: 8})
-	for range 12 {
-		cur = next(cur, notice)
-	}
+	return cur, adv, next
+}
+
+// TestForceGotoBottomScrollsWithoutTranscriptChange keeps the force-bottom
+// contract independent from transcript length, width, or dirty-state changes.
+func TestForceGotoBottomScrollsWithoutTranscriptChange(t *testing.T) {
+	cur, adv, next := newScrolledCmdChatTUI(t)
 	if !cur.viewport.AtBottom() {
 		t.Fatal("new output while pinned should keep the viewport at the bottom")
 	}
@@ -3167,22 +3131,7 @@ func TestForceGotoBottomScrollsWithoutTranscriptChange(t *testing.T) {
 }
 
 func TestSessionSwitchSuppressesOneWarpClearScreen(t *testing.T) {
-	ctrl := control.New(control.Options{})
-	ch := make(chan event.Event, 1)
-	notice := agentEventMsg(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "line"})
-	adv := func(m chatTUI, msg tea.Msg) (chatTUI, tea.Cmd) {
-		n, cmd := m.Update(msg)
-		return n.(chatTUI), cmd
-	}
-	next := func(m chatTUI, msg tea.Msg) chatTUI {
-		n, _ := adv(m, msg)
-		return n
-	}
-
-	cur := next(newChatTUI(ctrl, "", ch, 80), tea.WindowSizeMsg{Width: 80, Height: 8})
-	for range 12 {
-		cur = next(cur, notice)
-	}
+	cur, adv, next := newScrolledCmdChatTUI(t)
 	cur = next(cur, tea.MouseWheelMsg{Button: tea.MouseWheelUp})
 	if cur.viewport.AtBottom() {
 		t.Fatal("wheel-up should break the bottom pin")

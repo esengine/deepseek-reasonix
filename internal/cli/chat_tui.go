@@ -1312,14 +1312,11 @@ func (m chatTUI) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Transcript scroll keys work in any state (PgUp/PgDn are never text).
 		switch msg.String() {
-		case "pgup":
-			m.viewport.PageUp()
-			m.syncScrollModeAfterGesture()
-			return m, finalize(m, cmds)
-		case "pgdown":
-			m.viewport.PageDown()
-			m.syncScrollModeAfterGesture()
-			return m, finalize(m, cmds)
+		case "pgup", "pgdown":
+			if m.scrollTranscript(msg.String()) {
+				m.syncScrollModeAfterGesture()
+				return m, finalize(m, cmds)
+			}
 		case "ctrl+home":
 			m.viewport.GotoTop()
 			m.markUserScrolled()
@@ -2161,6 +2158,21 @@ func (m chatTUI) scrollChunkHeight() int {
 		return n
 	}
 	return 1
+}
+
+// scrollTranscript applies the viewport motion for a transcript scroll gesture.
+// It reports false when the key is not a scroll key, so the caller can continue
+// normal key dispatch. Distinct keys share the post-gesture tail in the caller.
+func (m *chatTUI) scrollTranscript(key string) bool {
+	switch key {
+	case "pgup":
+		m.viewport.PageUp()
+	case "pgdown":
+		m.viewport.PageDown()
+	default:
+		return false
+	}
+	return true
 }
 
 // chunkLines splits s into blocks of at most n lines each, preserving order and
@@ -3357,51 +3369,24 @@ func (m chatTUI) View() tea.View {
 	// transcriptHeight so the viewport above fills exactly the rest of the screen.
 	var parts []string
 	rowsAboveBox := 0 // terminal rows occupied by panels/working line before the composer
-	if todo := m.renderTodoPanel(); todo != "" {
-		parts = append(parts, todo)
-		rowsAboveBox += strings.Count(todo, "\n") + 1
-	}
-	if banner := m.renderApprovalBanner(); banner != "" {
-		parts = append(parts, banner)
-		rowsAboveBox += strings.Count(banner, "\n") + 1
-	}
-	if card := m.renderChooser(); card != "" {
-		parts = append(parts, card)
-		rowsAboveBox += strings.Count(card, "\n") + 1
-	}
-	if card := m.renderElicit(); card != "" {
-		parts = append(parts, card)
-		rowsAboveBox += strings.Count(card, "\n") + 1
-	}
-	if card := m.renderRewind(); card != "" {
-		parts = append(parts, card)
-		rowsAboveBox += strings.Count(card, "\n") + 1
-	}
-	if card := m.renderMCPImport(); card != "" {
-		parts = append(parts, card)
-		rowsAboveBox += strings.Count(card, "\n") + 1
-	}
-	if card := m.renderResumePicker(); card != "" {
-		parts = append(parts, card)
-		rowsAboveBox += strings.Count(card, "\n") + 1
-	}
-	if card := m.renderQuickPicker(); card != "" {
-		parts = append(parts, card)
-		rowsAboveBox += strings.Count(card, "\n") + 1
-	}
-	if card := m.renderCopyPicker(); card != "" {
-		parts = append(parts, card)
-		rowsAboveBox += strings.Count(card, "\n") + 1
-	}
-	if menu := m.renderCompletion(); menu != "" {
-		parts = append(parts, menu)
-		rowsAboveBox += strings.Count(menu, "\n") + 1
-	}
-	if m.nativeScrollback {
-		if card := m.renderMainManager(); card != "" {
+	addCard := func(render func() string) {
+		if card := render(); card != "" {
 			parts = append(parts, card)
 			rowsAboveBox += strings.Count(card, "\n") + 1
 		}
+	}
+	addCard(m.renderTodoPanel)
+	addCard(m.renderApprovalBanner)
+	addCard(m.renderChooser)
+	addCard(m.renderElicit)
+	addCard(m.renderRewind)
+	addCard(m.renderMCPImport)
+	addCard(m.renderResumePicker)
+	addCard(m.renderQuickPicker)
+	addCard(m.renderCopyPicker)
+	addCard(m.renderCompletion)
+	if m.nativeScrollback {
+		addCard(m.renderMainManager)
 	}
 	// Layout: the working spinner (when running), then the composer when visible,
 	// then the persistent status block. Wide terminals keep two information rows
@@ -4368,23 +4353,11 @@ func (m *chatTUI) runSlashCommand(input string) tea.Cmd {
 		m.echoLocalCommand(input)
 		m.runPluginSubcommand(input)
 	case "/model":
-		m.echoLocalCommand(input)
-		m.runModelSubcommand(input)
-		if m.pendingModelSwitch != nil {
-			return m.pendingModelSwitch
-		}
+		return m.runSlashSubcommand(input, m.runModelSubcommand)
 	case "/provider":
-		m.echoLocalCommand(input)
-		m.runProviderCommand(input)
-		if m.pendingModelSwitch != nil {
-			return m.pendingModelSwitch
-		}
+		return m.runSlashSubcommand(input, m.runProviderCommand)
 	case "/skill", "/skills":
-		m.echoLocalCommand(input)
-		m.runSkillSubcommand(input)
-		if m.pendingModelSwitch != nil {
-			return m.pendingModelSwitch
-		}
+		return m.runSlashSubcommand(input, m.runSkillSubcommand)
 	case "/hooks":
 		m.echoLocalCommand(input)
 		m.runHooksSubcommand(input)
@@ -4684,6 +4657,18 @@ func (m *chatTUI) runExportCommand(input string) {
 	b.WriteString("# reasonix session\n\n")
 	lastRole := provider.Role("")
 	exportedMessages := 0
+	exportBlock := func(role provider.Role, header, content string) {
+		if content == "" {
+			return
+		}
+		if lastRole != role {
+			b.WriteString(header + "\n\n")
+		}
+		b.WriteString(content)
+		b.WriteString("\n\n")
+		exportedMessages++
+		lastRole = role
+	}
 	for _, msg := range cliHistoryWithoutPinnedContextRevisions(msgs) {
 		switch msg.Role {
 		case provider.RoleUser:
@@ -4691,29 +4676,9 @@ func (m *chatTUI) runExportCommand(input string) {
 			if _, isSteer := agent.SteerText(msg.Content); isSteer {
 				continue
 			}
-			content := exportUserContent(msg.Content)
-			if content == "" {
-				continue
-			}
-			if lastRole != provider.RoleUser {
-				b.WriteString("## User\n\n")
-			}
-			b.WriteString(content)
-			b.WriteString("\n\n")
-			exportedMessages++
-			lastRole = provider.RoleUser
+			exportBlock(provider.RoleUser, "## User", exportUserContent(msg.Content))
 		case provider.RoleAssistant:
-			content := strings.TrimSpace(msg.Content)
-			if content == "" {
-				continue
-			}
-			if lastRole != provider.RoleAssistant {
-				b.WriteString("## Assistant\n\n")
-			}
-			b.WriteString(content)
-			b.WriteString("\n\n")
-			exportedMessages++
-			lastRole = provider.RoleAssistant
+			exportBlock(provider.RoleAssistant, "## Assistant", strings.TrimSpace(msg.Content))
 		}
 	}
 	if exportedMessages == 0 {
@@ -4751,6 +4716,17 @@ func (m *chatTUI) echoLocalCommand(input string) {
 		return
 	}
 	m.commitLine(dim("  › " + input))
+}
+
+// runSlashSubcommand echoes the command and runs fn, then returns a pending
+// model switch when the subcommand queued one.
+func (m *chatTUI) runSlashSubcommand(input string, fn func(string)) tea.Cmd {
+	m.echoLocalCommand(input)
+	fn(input)
+	if m.pendingModelSwitch != nil {
+		return m.pendingModelSwitch
+	}
+	return nil
 }
 
 // commandNames renders the custom command list for /help, "" when there are none.
