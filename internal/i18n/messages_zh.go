@@ -131,7 +131,7 @@ var Chinese = Messages{
 	ChatStatusCostLabel:                    "费用",
 	ChatStatusCacheNowFmt:                  "本次命中 %s",
 	ChatStatusCacheAvgFmt:                  "平均 %s",
-	ChatStatusPlanApproval:                 "1 开始执行 · 2 修改计划 · 3 暂不执行并退出 · n/Esc 继续规划 · PgUp/PgDn/Ctrl+Home/End 滚动",
+	ChatStatusPlanApproval:                 "1 开始执行 · 2 修改计划 · 3 暂不执行并退出 · n/Esc 继续规划 · PgUp/PgDn/Shift+PgUp/PgDn/Shift+Up/Down/Ctrl+Home/End 滚动",
 	PlanApprovalPrompt:                     "计划已生成（见上方）— 请选择下一步操作",
 	PlanApprovalChoices:                    "1. 开始执行\n2. 修改计划（继续规划）\n3. 暂不执行，退出计划模式\n选择 [1/2/3]（y 开始执行；n/Esc 继续规划）",
 	ChatStatusToolApproval:                 "1 本次允许 · 2 本会话允许此范围 · 提供时 3/4 为前缀或保存 · n/Esc 拒绝 · Ctrl-C 取消本轮",

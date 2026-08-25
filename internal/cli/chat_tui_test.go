@@ -1677,6 +1677,53 @@ func TestMouseWheelAndPageKeysScrollTranscript(t *testing.T) {
 	}
 }
 
+func TestShiftScrollKeysScrollTranscript(t *testing.T) {
+	ctrl := control.New(control.Options{})
+	ch := make(chan event.Event, 1)
+	notice := agentEventMsg(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: "line"})
+	adv := func(m chatTUI, msg tea.Msg) chatTUI {
+		n, cmd := m.Update(msg)
+		if _, key := msg.(tea.KeyPressMsg); cmd != nil && key {
+			t.Fatalf("viewport scroll key %T should rely on the renderer diff, got command %T", msg, cmd)
+		}
+		return n.(chatTUI)
+	}
+	cur := adv(newChatTUI(ctrl, "", ch, 80), tea.WindowSizeMsg{Width: 80, Height: 10})
+	for range 40 {
+		cur = adv(cur, notice)
+	}
+	if !cur.viewport.AtBottom() {
+		t.Fatal("viewport should start at bottom after overflowing output")
+	}
+	bottom := cur.viewport.YOffset()
+	if bottom <= cur.viewport.Height()*2 {
+		t.Fatalf("test transcript did not overflow enough: bottom=%d height=%d", bottom, cur.viewport.Height())
+	}
+
+	// Shift+PgUp moves up by roughly half the viewport height.
+	cur = adv(cur, tea.KeyPressMsg{Code: tea.KeyPgUp, Mod: tea.ModShift})
+	halfUp := cur.viewport.YOffset()
+	if got, want := halfUp, bottom-cur.viewport.Height()/2; got != want {
+		t.Fatalf("shift+pgup YOffset = %d, want %d", got, want)
+	}
+	// Shift+PgDn returns to the bottom.
+	cur = adv(cur, tea.KeyPressMsg{Code: tea.KeyPgDown, Mod: tea.ModShift})
+	if got := cur.viewport.YOffset(); got != bottom {
+		t.Fatalf("shift+pgdn should return to bottom, YOffset=%d want %d", got, bottom)
+	}
+
+	// Shift+Up moves up a single line.
+	cur = adv(cur, tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModShift})
+	if got, want := cur.viewport.YOffset(), bottom-1; got != want {
+		t.Fatalf("shift+up YOffset = %d, want %d", got, want)
+	}
+	// Shift+Down returns to the bottom.
+	cur = adv(cur, tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModShift})
+	if got := cur.viewport.YOffset(); got != bottom {
+		t.Fatalf("shift+down should return to bottom, YOffset=%d want %d", got, bottom)
+	}
+}
+
 func TestRunningStreamPreservesScrolledReadingPosition(t *testing.T) {
 	cur, adv := newScrolledChatTUI(t, 10, 40)
 	cur.state = tuiRunning
