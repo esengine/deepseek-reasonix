@@ -406,6 +406,7 @@ single-key shortcuts.
 | `Up` / `Down`, `Ctrl+P` / `Ctrl+N` | Move through picker or approval rows. |
 | `j` / `k` | Move while the search is empty; after search input starts, enter `j` / `k` as query text. |
 | Type | Filter a searchable picker. |
+| Number keys | In YOLO mode, pick the numbered row directly from an unfiltered model / provider / resume list; otherwise they filter like any other typed text. |
 | `Enter` | Select the highlighted row. |
 | `Esc` | Cancel the current picker or approval. |
 | `y` / `a` / `p` / `n`, number keys | Use the matching approval action. |

@@ -63,7 +63,7 @@ func (m *chatTUI) openResumePicker() {
 	}
 	m.resumePick = &resumePicker{
 		entries: entries, sel: sel, active: activeIdx,
-		quick: &quickPicker{kind: quickPickerResume, title: i18n.M.ResumePickTitle, items: items, selected: sel},
+		quick: &quickPicker{kind: quickPickerResume, title: i18n.M.ResumePickTitle, items: items, selected: sel, digitSelect: m.quickPickerYolo()},
 	}
 }
 
