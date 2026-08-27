@@ -497,6 +497,12 @@ The username in that auto value resolves in this priority order: a repo-local `l
 then the `$LOGNAME` environment variable, then the system account. If both
 `logname` and `user` are set, `logname` prevails and a load warning is recorded.
 
+From the same auto derivation Reasonix also sends a `session_id` (≤256 chars,
+OpenRouter's ceiling) as the top-level `session_id` on OpenAI-compatible
+provider requests. Like the `user` id it is derived per project, so a
+conversation's continuation stays stable across runs; gateways that do not
+define the field ignore it.
+
 ## Desktop hooks
 
 Desktop hooks run local commands at lifecycle events such as `SessionStart`,

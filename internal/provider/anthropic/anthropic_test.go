@@ -1049,6 +1049,56 @@ data: {"type":"message_stop"}
 	}
 }
 
+// TestStreamSendsSessionID guards the session_id wiring on the Anthropic wire:
+// the derived workspace session id must reach the body as the top-level
+// `session_id` (OpenRouter's convention) and stay absent when unset. Like
+// user_id it is emitted for every upstream; gateways that do not define the
+// field ignore it.
+func TestStreamSendsSessionID(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, `event: message_start
+data: {"type":"message_start","message":{"usage":{"input_tokens":2,"output_tokens":0}}}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":1}}
+
+event: message_stop
+data: {"type":"message_stop"}
+
+`)
+	}))
+	defer srv.Close()
+
+	p, err := New(provider.Config{
+		Name:    "gateway",
+		BaseURL: srv.URL,
+		Model:   "claude-sonnet-4",
+		APIKey:  "sk-test",
+		Extra:   map[string]any{"session_id": "alice--home-alice-proj"},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ch, err := p.Stream(context.Background(), provider.Request{
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	for chunk := range ch {
+		if chunk.Type == provider.ChunkError {
+			t.Fatalf("stream error: %v", chunk.Err)
+		}
+	}
+	if body["session_id"] != "alice--home-alice-proj" {
+		t.Fatalf("session_id = %#v, want %q", body["session_id"], "alice--home-alice-proj")
+	}
+}
+
 // TestStreamOmitsMetadataUserIDWhenUnset ensures a bare provider does not send
 // a spurious empty metadata block.
 func TestStreamOmitsMetadataUserIDWhenUnset(t *testing.T) {

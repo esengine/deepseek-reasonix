@@ -1356,6 +1356,7 @@ type ProviderEntry struct {
 	credentialProxyURL string // runtime-only loopback transport, never persisted
 	resolvedSource     CredentialSource
 	cacheContext       string // workspace user attribution id (Config.CacheContext), set at load; sent as user_id
+	sessionContext     string // derived per-workspace OpenRouter session_id, set at load; sent as session_id
 	BalanceURL         string `toml:"balance_url"` // optional; a provider-specific wallet-balance endpoint (DeepSeek: https://api.deepseek.com/user/balance). Empty = no balance readout.
 	ContextWindow      int    `toml:"context_window"`
 	// MaxOutputTokens is a protocol-neutral total output budget for one turn.
@@ -2104,6 +2105,16 @@ func (e *ProviderEntry) CacheContextValue() string {
 		return ""
 	}
 	return e.cacheContext
+}
+
+// SessionContextValue returns the derived OpenRouter session_id assigned at
+// load (Config.EffectiveSessionContext). Empty when the entry was built outside
+// a workspace config.
+func (e *ProviderEntry) SessionContextValue() string {
+	if e == nil {
+		return ""
+	}
+	return e.sessionContext
 }
 
 // APIKey resolves the entry's API key from its api_key_env.

@@ -12,6 +12,9 @@ import (
 // maxCacheContextLen is DeepSeek's user_id length ceiling (512).
 const maxCacheContextLen = 512
 
+// maxSessionContextLen is OpenRouter's session_id length ceiling (256).
+const maxSessionContextLen = 256
+
 // cacheContextIDRegexp matches the characters DeepSeek rejects in a user_id.
 var cacheContextIDRegexp = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
 
@@ -29,19 +32,7 @@ func DefaultCacheContextForRoot(root string) string {
 // the "<user>-" prefix and the path tail, hashing the overflowing middle so
 // the result is exactly maxCacheContextLen characters.
 func BuildCacheContext(user, root string) string {
-	if user == "" {
-		return ""
-	}
-	abs, err := filepath.Abs(root)
-	if err != nil || abs == "" {
-		return ""
-	}
-	sanUser := sanitizeCacheContext(user)
-	s := sanitizeCacheContext(user + ":" + abs)
-	if len(s) <= maxCacheContextLen {
-		return s
-	}
-	return hashCacheContext(sanUser, s, maxCacheContextLen)
+	return deriveContextID(user, root, maxCacheContextLen)
 }
 
 // EffectiveCacheContext returns the explicit cachecontext, or the auto
@@ -56,6 +47,43 @@ func (c *Config) EffectiveCacheContext(root string) string {
 		return ""
 	}
 	return BuildCacheContext(c.cacheContextUser(), root)
+}
+
+// BuildSessionContext builds an OpenRouter session_id from a username and repo
+// root, sanitized to ^[a-zA-Z0-9_-]+$ (≤256). Same derivation as the
+// cachecontext but with OpenRouter's shorter ceiling, so a project keeps one
+// stable conversation-storage key per provider.
+func BuildSessionContext(user, root string) string {
+	return deriveContextID(user, root, maxSessionContextLen)
+}
+
+// EffectiveSessionContext returns the auto "<user>:<repo>" OpenRouter
+// session_id derived the same way as the cachecontext, sharing its username
+// override chain. OpenRouter has no explicit config knob: the id is always
+// derived so a project's sessions stay stable across runs.
+func (c *Config) EffectiveSessionContext(root string) string {
+	if root == "" {
+		return ""
+	}
+	return BuildSessionContext(c.cacheContextUser(), root)
+}
+
+// deriveContextID is the shared <user>:<root> → sanitized id builder behind
+// both the cachecontext (512) and the OpenRouter session_id (256).
+func deriveContextID(user, root string, maxLen int) string {
+	if user == "" {
+		return ""
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil || abs == "" {
+		return ""
+	}
+	sanUser := sanitizeCacheContext(user)
+	s := sanitizeCacheContext(user + ":" + abs)
+	if len(s) <= maxLen {
+		return s
+	}
+	return hashCacheContext(sanUser, s, maxLen)
 }
 
 // cacheContextUser resolves the username for the auto cachecontext, preferring

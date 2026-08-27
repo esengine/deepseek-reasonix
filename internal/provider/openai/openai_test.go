@@ -769,6 +769,46 @@ func TestStreamSendsUserID(t *testing.T) {
 	}
 }
 
+// TestStreamSendsSessionID guards the session_id wiring: the derived workspace
+// session id must reach the OpenAI-compatible body as the top-level
+// `session_id` and stay absent when unset. Like user_id it is emitted for every
+// upstream; OpenRouter defined the field, other gateways ignore it.
+func TestStreamSendsSessionID(t *testing.T) {
+	var body map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n")
+	}))
+	defer srv.Close()
+
+	p, err := New(provider.Config{
+		Name:    "gateway",
+		BaseURL: srv.URL,
+		Model:   "m",
+		APIKey:  "real-key",
+		Extra:   map[string]any{"session_id": "alice--home-alice-proj"},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ch, err := p.Stream(context.Background(), provider.Request{
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	for chunk := range ch {
+		if chunk.Type == provider.ChunkError {
+			t.Fatalf("stream error: %v", chunk.Err)
+		}
+	}
+	if body["session_id"] != "alice--home-alice-proj" {
+		t.Fatalf("session_id = %#v, want %q", body["session_id"], "alice--home-alice-proj")
+	}
+}
+
 // TestBuildRequestAlwaysSerializesContent guards the DeepSeek 400 regression:
 // DeepSeek rejects a message missing the `content` field, so every message must
 // serialize one. A pure tool_calls assistant turn carries null (OpenAI-spec,

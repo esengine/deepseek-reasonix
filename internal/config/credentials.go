@@ -226,8 +226,10 @@ func resolveProviderCredentialsForRoot(root string, cfg *Config) {
 	for i := range cfg.Providers {
 		resolveProviderCredentialWithResolver(&cfg.Providers[i], resolver)
 		// Stamp the workspace cachecontext onto every entry; when none is
-		// configured, fall back to the auto "<user>:<repo>" default.
+		// configured, fall back to the auto "<user>:<repo>" default. Same
+		// derivation feeds the OpenRouter session_id (≤256).
 		cfg.Providers[i].cacheContext = cfg.EffectiveCacheContext(root)
+		cfg.Providers[i].sessionContext = cfg.EffectiveSessionContext(root)
 	}
 }
 

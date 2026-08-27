@@ -413,6 +413,10 @@ cachecontext = "my-project"
 （`logname` 的旧别名）、`$LOGNAME` 环境变量、系统账户。若 `logname` 与 `user` 同时设置，
 `logname` 生效并记录一条加载警告。
 
+同样的自动推导还会生成一个 `session_id`（不超过 256 个字符，即 OpenRouter 的上限），作为
+OpenAI 兼容 provider 请求中的顶层 `session_id` 发送。与 `user` id 一样按项目推导，因此同一对话的
+延续在多次运行间保持稳定；未定义该字段的网关会忽略它。
+
 ## 快捷键
 
 这里按使用端来写，因为用户通常是先知道“我现在在桌面端/CLI”，再找对应按键。

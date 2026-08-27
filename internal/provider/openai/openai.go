@@ -92,6 +92,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	headers, _ := cfg.Extra["headers"].(map[string]string)
 	extraBody, _ := cfg.Extra["extra_body"].(map[string]any)
 	userID, _ := cfg.Extra["user_id"].(string)
+	sessionID, _ := cfg.Extra["session_id"].(string)
 	vision, _ := cfg.Extra["vision"].(bool)
 	officialDeepSeek := IsDeepSeek(cfg.BaseURL)
 	modelInfo := provider.ModelInfo{ID: cfg.Model, InputModalities: []provider.ModelModality{provider.ModalityText}}
@@ -249,6 +250,7 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		headers:         cleanCustomHeaders(headers),
 		extraBody:       cleanExtraBody(extraBody),
 		userID:          userID,
+		sessionID:       sessionID,
 		model:           deepSeekChatWireModel(chatURL, normalizeModelID(cfg.BaseURL, cfg.Model)),
 		deepseek:        deepseek,
 		minimax:         minimax,
@@ -294,6 +296,7 @@ type client struct {
 	headers         map[string]string
 	extraBody       map[string]any
 	userID          string // workspace user attribution id; sent as the `user` body field
+	sessionID       string // derived OpenRouter session_id; sent as the top-level `session_id` body field
 	model           string
 	http            *http.Client
 	deepseek        bool
@@ -805,6 +808,7 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 		MaxTokens:       maxOutputTokens,
 		ReasoningEffort: kimiK3ReasoningEffort(c.kimiK3, c.requestEffort(req)),
 		User:            c.userID,
+		SessionID:       c.sessionID,
 		ExtraBody:       c.extraBody,
 	}
 	c.applyReasoning(&out, req)
@@ -1114,6 +1118,7 @@ type chatRequest struct {
 	ReasoningEffort     string         `json:"reasoning_effort,omitempty"`
 	Thinking            *thinkingMode  `json:"thinking,omitempty"`
 	User                string         `json:"user,omitempty"`
+	SessionID           string         `json:"session_id,omitempty"`
 	ExtraBody           map[string]any `json:"-"`
 }
 

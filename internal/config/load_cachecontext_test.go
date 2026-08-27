@@ -76,3 +76,40 @@ func TestEffectiveCacheContextWithoutRootOnlyExplicit(t *testing.T) {
 		t.Fatalf("no root + no explicit should be empty, got %q", got)
 	}
 }
+
+// TestBuildSessionContextLen256 guards OpenRouter's session_id ceiling: the
+// derived id must never exceed 256 characters and must stay sanitized to
+// ^[a-zA-Z0-9_-]+$.
+func TestBuildSessionContextLen256(t *testing.T) {
+	longRoot := filepath.Join(t.TempDir(), strings.Repeat("segment/", 80))
+	got := BuildSessionContext("alice", longRoot)
+	if len(got) > maxSessionContextLen {
+		t.Fatalf("len = %d, want <= %d", len(got), maxSessionContextLen)
+	}
+	if cacheContextIDRegexp.MatchString(got) {
+		t.Fatalf("output %q contains characters OpenRouter rejects", got)
+	}
+}
+
+func TestBuildSessionContextEqualsCacheContextPath(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "proj")
+	want := BuildCacheContext("alice", root)
+	got := BuildSessionContext("alice", root)
+	if got != want {
+		t.Fatalf("session id %q != cachecontext %q for the same root", got, want)
+	}
+}
+
+func TestEffectiveSessionContextSharesUserChain(t *testing.T) {
+	t.Setenv("LOGNAME", "log-env")
+	got := (&Config{}).EffectiveSessionContext(filepath.Join(t.TempDir(), "proj"))
+	if got == "" || len(got) > maxSessionContextLen {
+		t.Fatalf("EffectiveSessionContext = %q, want non-empty <= %d", got, maxSessionContextLen)
+	}
+	if !strings.HasPrefix(got, "log-env") {
+		t.Fatalf("effective session id should start with the resolved username, got %q", got)
+	}
+	if got := (&Config{}).EffectiveSessionContext(""); got != "" {
+		t.Fatalf("no root should give empty session id, got %q", got)
+	}
+}
