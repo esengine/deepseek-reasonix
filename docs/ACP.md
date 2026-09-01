@@ -198,6 +198,13 @@ Hosts should keep the `session/prompt` request open until Reasonix returns its
 stop reason, while continuing to process requests and notifications in both
 directions.
 
+A prompt of `/clear` clears the current session in place (a fresh transcript,
+same session id), matching the CLI's `/clear`. When the session's tool-approval
+mode is Yolo the clear happens immediately; in Ask, Auto, and Plan modes
+Reasonix first asks the client with a `session/request_permission` round-trip
+whose `Clear the session` option confirms the clear and `Cancel` aborts it.
+The command is advertised in `available_commands_update` as `clear`.
+
 Reasonix emits only ACP v1 stop reasons. A completed turn that still needs a
 final-readiness check sends a `[warning]` message chunk and returns `end_turn`;
 its vendor status remains `readiness_paused` so the host can offer recovery.

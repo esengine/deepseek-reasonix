@@ -92,14 +92,20 @@ func (f *e2eFactory) NewSession(_ context.Context, p SessionParams) (*control.Co
 	}
 	executor := agent.New(f.prov, reg, agent.NewSession("you are a test agent"),
 		opts, p.Sink)
-	return control.New(control.Options{
-		Runner:     executor,
-		Executor:   executor,
-		Sink:       p.Sink,
-		Policy:     f.policy,
-		Label:      "fake-model",
-		SessionDir: f.sessionDir,
-	}), nil
+	ctrl := control.New(control.Options{
+		Runner:       executor,
+		Executor:     executor,
+		Sink:         p.Sink,
+		Policy:       f.policy,
+		Label:        "fake-model",
+		SessionDir:   f.sessionDir,
+		SystemPrompt: "you are a test agent",
+	})
+	// The composition root wires these through boot.Options; the e2e factory
+	// must too, or path transitions (e.g. /clear) fail closed.
+	ctrl.SetOnSessionRecovered(p.OnSessionRecovered)
+	ctrl.SetOnSessionTransition(p.OnSessionTransition)
+	return ctrl, nil
 }
 
 func TestE2EExplicitMaxStepsReturnsSuccessfulPause(t *testing.T) {

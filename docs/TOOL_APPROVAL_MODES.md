@@ -90,9 +90,12 @@ requirement and explicit interactive memory `ask` rules. Auto also skips the
 default memory fallback prompt, but preserves explicit `ask` rules. Neither mode
 bypasses explicit `deny` rules, the sandbox, plan confirmation, or managed config writes.
 
-Because Yolo already opts out of confirmations, the CLI `/clear` command clears
+Because Yolo already opts out of confirmations, the `/clear` command clears
 the session immediately in Yolo mode instead of opening its confirmation
-overlay; Ask, Auto, and Plan keep the confirmation.
+overlay; Ask, Auto, and Plan keep the confirmation. This applies to the CLI
+composer and to ACP sessions (`reasonix acp`): ACP asks the host through a
+`session/request_permission` round-trip in non-Yolo modes and clears directly
+in Yolo mode.
 
 ### How to enable
 
