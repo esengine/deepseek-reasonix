@@ -59,8 +59,8 @@ func (m ManagedConfigPaths) Match(target string) bool {
 func (m ManagedConfigPaths) approve(ctx context.Context, target string) error {
 	approver, ok := tool.ConfigWriteApproverFrom(ctx)
 	if !ok {
-		return fmt.Errorf("path %q is a Reasonix-managed config file outside the writable roots; writing it requires interactive user approval, which this session cannot provide. "+
-			"Ask the user to retry in an interactive session, or to add the directory to [sandbox] allow_write in reasonix.toml", target)
+		return fmt.Errorf("path %q is a Reasonix-managed config file; writing it requires interactive user approval, which this session cannot provide. "+
+			"Ask the user to retry in an interactive session; widening [sandbox] allow_write does not authorize Reasonix config edits", target)
 	}
 	req := tool.ConfigWriteRequest{Path: target}
 	if checker, ok := approver.(tool.ConfigWriteSessionChecker); ok && checker.ManagedConfigWriteSessionAllowed(ctx, req) {

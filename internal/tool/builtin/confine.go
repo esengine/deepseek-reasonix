@@ -214,22 +214,23 @@ func confine(roots []string, target string) error {
 // confineWrite is the write-tool boundary check: workspace confinement first,
 // then the session-data guard, so a write can be inside the roots (e.g. a
 // home-directory workspace covering the state root) and still be refused when
-// it targets Reasonix's own session stores. A target outside every root that
-// matches a Reasonix-managed config file (see ManagedConfigPaths) may proceed
-// after a fresh per-write human approval carried on ctx; without an approver it
-// fails closed with the original confinement error semantics.
+// it targets Reasonix's own session stores. A target that matches a
+// Reasonix-managed config file (see ManagedConfigPaths) is always gated by a
+// fresh per-write human approval carried on ctx, even when the roots already
+// cover it: those files configure providers, sandbox rules, and permissions
+// for future sessions, so no posture (YOLO included) and no widened root may
+// write them silently. Without an approver the write fails closed.
 func confineWrite(ctx context.Context, roots []string, guard SessionDataGuard, managed ManagedConfigPaths, target string) error {
-	confineErr := confine(roots, target)
-	if confineErr == nil {
-		return guard.Check(target)
+	if managed.Match(target) {
+		if err := guard.Check(target); err != nil {
+			return err
+		}
+		return managed.approve(ctx, target)
 	}
-	if !managed.Match(target) {
-		return confineErr
-	}
-	if err := guard.Check(target); err != nil {
+	if err := confine(roots, target); err != nil {
 		return err
 	}
-	return managed.approve(ctx, target)
+	return guard.Check(target)
 }
 
 // confinePreview is stricter than confineWrite because Preview runs before the
