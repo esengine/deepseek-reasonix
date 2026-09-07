@@ -1477,6 +1477,14 @@ func defaultEnvTarget() string {
 // resolveSetupTargets picks where `reasonix setup` writes. Keys always go to the
 // global env. The config goes to the user-global dir by default, to ./reasonix.toml
 // under --local, or to an explicit path argument when given.
+func setupUsage(w io.Writer) {
+	fmt.Fprintln(w, "usage: reasonix setup [--local|-l] [path]")
+	fmt.Fprintln(w, "Interactive configuration wizard. Writes a reasonix config and stores the")
+	fmt.Fprintln(w, "provider API key in Reasonix's credential file, never in the config itself.")
+	fmt.Fprintln(w, "  --local, -l   write ./reasonix.toml instead of the user-global config")
+	fmt.Fprintln(w, "  path          write the config to this path instead of the default")
+}
+
 func resolveSetupTargets(args []string) setupTargets {
 	t := setupTargets{config: defaultConfigTarget(), env: defaultEnvTarget()}
 	for _, a := range args {
@@ -1504,6 +1512,23 @@ func displayPath(p string) string {
 // Project memory is a separate concern — the in-session `/init` skill generates
 // AGENTS.md (see initHint).
 func setupConfig(args []string) int {
+	if commandHelpRequested(args, len(args)) {
+		setupUsage(os.Stdout)
+		return 0
+	}
+	// resolveSetupTargets treats every unrecognized argument as the config path,
+	// so a mistyped flag — or --help — silently becomes the file it writes.
+	// Reject dashed arguments here instead.
+	for _, a := range args {
+		if a == "--local" || a == "-l" {
+			continue
+		}
+		if strings.HasPrefix(a, "-") {
+			fmt.Fprintf(os.Stderr, "unknown setup flag %q\n\n", a)
+			setupUsage(os.Stderr)
+			return 2
+		}
+	}
 	t := resolveSetupTargets(args)
 	path := t.config
 	if _, err := os.Stat(path); err == nil {
