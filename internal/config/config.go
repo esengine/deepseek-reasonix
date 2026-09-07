@@ -273,6 +273,14 @@ type CLIConfig struct {
 	// configurations. Runtime behavior is always the official release channel,
 	// and the canonical renderer intentionally drops this field.
 	UpdateChannel string `toml:"update_channel"`
+	// DownloadMirror rewrites release-asset downloads (the upgrade archive and
+	// its SHA256SUMS) to this base URL — for networks where github.com release
+	// downloads are throttled. The releases API is never mirrored, and the
+	// archive checksum is still verified against the mirrored checksums file,
+	// so the mirror cannot serve tampered bytes without failing the upgrade.
+	// Empty downloads straight from github.com. REASONIX_DOWNLOAD_MIRROR
+	// overrides the file value for one run.
+	DownloadMirror string `toml:"download_mirror"`
 }
 
 // DesktopConfig controls desktop-only UI preferences. It is intentionally
@@ -628,6 +636,24 @@ func (c *Config) CLIUpdateChannel() string {
 		return "stable"
 	}
 	return NormalizeCLIUpdateChannel(c.CLI.UpdateChannel)
+}
+
+// CLIDownloadMirror returns the release-asset download mirror base, with
+// REASONIX_DOWNLOAD_MIRROR overriding the file value for one run. Empty means
+// downloading straight from github.com. The value is normalized to a bare
+// scheme+host (+ optional path prefix) with no trailing slash.
+func (c *Config) CLIDownloadMirror() string {
+	raw := strings.TrimSpace(os.Getenv("REASONIX_DOWNLOAD_MIRROR"))
+	if raw == "" && c != nil {
+		raw = strings.TrimSpace(c.CLI.DownloadMirror)
+	}
+	if raw == "" {
+		return ""
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "https://" + raw
+	}
+	return strings.TrimRight(raw, "/")
 }
 
 // NormalizeDesktopUpdateChannel returns the only public Desktop update channel.

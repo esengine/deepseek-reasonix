@@ -287,7 +287,8 @@ func upgradeCommand(args []string, version string) int {
 
 	// 7. Download archive.
 	fmt.Printf(i18n.M.UpgradeDownloadingFmt+"\n", asset.Name, humanSize(asset.Size))
-	archiveData, err := fetchBytesSized(c, asset.BrowserDownloadURL, asset.Size)
+	mirrorBase := cfg.CLIDownloadMirror()
+	archiveData, err := fetchBytesSized(c, mirrorAssetURL(asset.BrowserDownloadURL, mirrorBase), asset.Size)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s "+i18n.M.UpgradeDownloadFailed+"\n", i18n.M.ErrorPrefix, err)
 		return 1
@@ -295,7 +296,7 @@ func upgradeCommand(args []string, version string) int {
 
 	// 8. Verify SHA256 checksum — fail closed: abort on any verification error.
 	fmt.Println(i18n.M.UpgradeVerifying)
-	checksumData, err := fetchBytesSized(c, checksumAsset.BrowserDownloadURL, checksumAsset.Size)
+	checksumData, err := fetchBytesSized(c, mirrorAssetURL(checksumAsset.BrowserDownloadURL, mirrorBase), checksumAsset.Size)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s "+i18n.M.UpgradeChecksumFailed+"\n", i18n.M.ErrorPrefix, err)
 		return 1

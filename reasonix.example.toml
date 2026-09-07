@@ -34,6 +34,9 @@ turn_done = true   # notify when a turn finishes
 approval_request = true   # notify when a tool approval is waiting
 ask_request = true   # notify when a question is waiting
 
+# [cli]
+# download_mirror = ""    # release-asset download mirror for slow github.com routes; empty = direct (env: REASONIX_DOWNLOAD_MIRROR)
+
 [agent]
 # system_prompt = "You are ..."   # custom persona/prompt; unset or empty = built-in default
 # system_prompt_file = "prompts/system.md"   # project paths stay in <workspace>; user paths may fall back to <reasonix home>
