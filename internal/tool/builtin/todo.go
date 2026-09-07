@@ -187,13 +187,21 @@ func verifyCompletedTodoPositions(ctx context.Context, todos []todoItem) error {
 		}
 		match, found := evidence.MatchTodoIdentity(toEvidenceTodo(todo), previous)
 		if !found || match.Index != i+1 {
-			return fmt.Errorf("completed todo %d %q cannot be inserted, duplicated, or reordered; preserve the completed prefix", i+1, todo.Content)
+			return fmt.Errorf("completed todo %d %q cannot be inserted, duplicated, or reordered; preserve the completed prefix; canonical todo snapshot: %s", i+1, todo.Content, canonicalTodoSnapshot(previous))
 		}
 	}
 	if len(evidence.IncompleteTodos(previous)) > 0 && !evidence.PreservesCompletedTodoPositions(previous, toEvidenceTodos(todos)) {
-		return fmt.Errorf("completed task history cannot be removed, changed, or reordered while the plan is active; preserve every completed item at its original position")
+		return fmt.Errorf("completed task history cannot be removed, changed, or reordered while the plan is active; preserve every completed item at its original position; canonical todo snapshot: %s", canonicalTodoSnapshot(previous))
 	}
 	return nil
+}
+
+func canonicalTodoSnapshot(todos []evidence.TodoItem) string {
+	snapshot, err := json.Marshal(todos)
+	if err != nil {
+		return "<unavailable>"
+	}
+	return string(snapshot)
 }
 
 func todoBaseline(ctx context.Context) []evidence.TodoItem {

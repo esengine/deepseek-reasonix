@@ -264,6 +264,34 @@ func TestTodoWriteRejectsDuplicatedOrReorderedCompletedPrefix(t *testing.T) {
 	}
 }
 
+func TestTodoWriteCompletedPrefixErrorIncludesCanonicalSnapshot(t *testing.T) {
+	ledger := evidence.NewLedger()
+	ledger.Record(evidence.Receipt{
+		ToolName: "todo_write",
+		Success:  true,
+		Todos: []evidence.TodoItem{
+			{Content: "Inspect environment", Status: "completed", StepID: "inspect"},
+			{Content: "Design solution", Status: "completed", StepID: "design"},
+			{Content: "Write code", Status: "in_progress", StepID: "write"},
+		},
+	})
+	ctx := evidence.WithLedger(context.Background(), ledger)
+	args := json.RawMessage(`{"todos":[
+		{"content":"Design solution","status":"completed","step_id":"design"},
+		{"content":"Inspect environment","status":"completed","step_id":"inspect"},
+		{"content":"Write code","status":"in_progress","step_id":"write"}
+	]}`)
+
+	_, err := (todoWrite{}).Execute(ctx, args)
+	if err == nil {
+		t.Fatal("reordered completed prefix should be rejected")
+	}
+	want := `canonical todo snapshot: [{"content":"Inspect environment","status":"completed","step_id":"inspect"},{"content":"Design solution","status":"completed","step_id":"design"},{"content":"Write code","status":"in_progress","step_id":"write"}]`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("todo_write error = %q, want recovery snapshot %q", err, want)
+	}
+}
+
 func TestTodoWriteAcceptsCompletedAfterFailedCompleteStep(t *testing.T) {
 	ledger := evidence.NewLedger()
 	ledger.Record(evidence.Receipt{
@@ -545,7 +573,12 @@ func TestTodoWriteRejectsUnauthorizedCompletedHistoryRewrite(t *testing.T) {
 	ctx := evidence.WithLedger(context.Background(), ledger)
 	args := json.RawMessage(`{"todos":[{"content":"Write code","status":"in_progress"}]}`)
 
-	if _, err := (todoWrite{}).Execute(ctx, args); err == nil || !strings.Contains(err.Error(), "completed task history") {
+	_, err := (todoWrite{}).Execute(ctx, args)
+	if err == nil || !strings.Contains(err.Error(), "completed task history") {
 		t.Fatalf("unauthorized drop of completed history should be rejected: %v", err)
+	}
+	want := `canonical todo snapshot: [{"content":"Inspect environment","status":"completed"},{"content":"Write code","status":"in_progress"}]`
+	if !strings.Contains(err.Error(), want) {
+		t.Fatalf("todo_write error = %q, want recovery snapshot %q", err, want)
 	}
 }
