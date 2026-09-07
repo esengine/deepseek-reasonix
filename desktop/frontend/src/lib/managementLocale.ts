@@ -42,7 +42,7 @@ export type ManagementKey = keyof typeof messages;
 export function useManagementT() {
   const { locale } = useI18n();
   return useCallback((key: ManagementKey, vars?: Record<string, string | number>) => {
-    const text = messages[key][locale === "en" ? 2 : locale === "zh-TW" ? 1 : 0];
+    const text = messages[key][locale === "zh" ? 0 : locale === "zh-TW" ? 1 : 2];
     return text.replace(/\{(\w+)\}/g, (match, name: string) => vars?.[name] === undefined ? match : String(vars[name]));
   }, [locale]);
 }

@@ -352,6 +352,7 @@ type Messages struct {
 	ArgLanguageAuto     string // /language auto
 	ArgLanguageEn       string // /language en
 	ArgLanguageZh       string // /language zh
+	ArgLanguageEs       string // /language es
 
 	// management listing notices (the Submit path: desktop / HTTP frontends)
 	ListModelsHeaderFmt string // "models (active: %s)"
@@ -713,6 +714,9 @@ func setLanguage(tag string) string {
 	case "zh":
 		M = Chinese
 		currentLanguage = "zh"
+	case "es":
+		M = Spanish
+		currentLanguage = "es"
 	default:
 		M = English
 		currentLanguage = "en"
@@ -734,6 +738,9 @@ func normalize(s string) string {
 	}
 	if strings.HasPrefix(s, "zh") || strings.Contains(s, "chinese") || strings.Contains(s, "中文") {
 		return "zh"
+	}
+	if strings.HasPrefix(s, "es") || strings.Contains(s, "spanish") || strings.Contains(s, "español") {
+		return "es"
 	}
 	if strings.HasPrefix(s, "en") || strings.Contains(s, "english") {
 		return "en"

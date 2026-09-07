@@ -170,8 +170,16 @@ ci: add golangci-lint and govulncheck
 ## Adding i18n strings
 
 1. Add the field to `internal/i18n/i18n.go` (`Messages` struct)
-2. Add the value in `internal/i18n/messages_en.go` and `messages_zh.go`
-3. The `TestCatalogsComplete` test will fail if you miss a locale
+2. Add the value in every existing catalogue — `internal/i18n/messages_en.go`,
+   `messages_zh.go`, and `messages_zh_tw.go`
+3. Adding a new locale means a new `internal/i18n/messages_<tag>.go` file with a
+   full `Messages` value, plus a `setLanguage`/`normalize` case in `i18n.go`,
+   the `/language` option in `internal/cli/language.go` and
+   `internal/control/slash.go`, and an entry in the catalog maps of
+   `i18n_test.go` and `catalog_parity_test.go`. Follow the es-419 (neutral
+   Latin American) conventions of `messages_es.go` as the Spanish baseline.
+4. The `TestCatalogsComplete`, placeholder, and code-token parity tests fail if
+   a locale misses a field or drifts from the English baseline
 
 ## Submitting changes
 

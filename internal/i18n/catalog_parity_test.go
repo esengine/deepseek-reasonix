@@ -47,6 +47,7 @@ func TestCatalogsAgreeOnCodeTokens(t *testing.T) {
 		}{
 			{"zh", reflect.ValueOf(Chinese)},
 			{"zh-TW", reflect.ValueOf(ChineseTraditional)},
+			{"es", reflect.ValueOf(Spanish)},
 		} {
 			got := extractCodeTokens(cat.v.Field(i).String())
 			if !equalTokenSets(want, got) {

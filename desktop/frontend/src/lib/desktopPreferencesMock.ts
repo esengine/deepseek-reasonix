@@ -16,7 +16,7 @@ export function createDesktopPreferencesMock(settings: SettingsView) {
       settings.statusBarItems = normalizeStatusBarItems(items);
     },
     async SetDesktopLanguage(lang: string) {
-      settings.desktopLanguage = lang === "en" || lang === "zh" ? lang : "";
+      settings.desktopLanguage = lang === "en" || lang === "zh" || lang === "zh-TW" || lang === "es" ? lang : "";
     },
     async SetDesktopCurrency(currency: string) {
       settings.desktopCurrency = currency === "CNY" || currency === "USD" ? currency : "";
@@ -39,7 +39,7 @@ export function createDesktopPreferencesMock(settings: SettingsView) {
     async SetSessionExperience(mode: "standard" | "deep") { applyMockSessionExperience(settings, mode); },
     async SetExpandThinking() { applyMockSessionExperience(settings, "standard"); },
     async MigrateDesktopPreferences(language: string, theme: string, style: string) {
-      if (!settings.desktopLanguage) settings.desktopLanguage = language === "en" || language === "zh" || language === "zh-TW" ? language : "";
+      if (!settings.desktopLanguage) settings.desktopLanguage = language === "en" || language === "zh" || language === "zh-TW" || language === "es" ? language : "";
       if (!settings.desktopTheme && !settings.desktopThemeStyle) {
         settings.desktopTheme = theme === "auto" || theme === "light" ? theme : "dark";
         settings.desktopThemeStyle = style;

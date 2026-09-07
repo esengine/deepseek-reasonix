@@ -647,7 +647,7 @@ export interface AppBindings extends SessionCatalogBindings, ProjectTreeOrganiza
   SetAgentParams(temperature: number, maxSteps: number, plannerMaxSteps: number, systemPrompt: string): Promise<void>;
   SetCompactRatio(ratio: number): Promise<void>;
   SetReasoningLanguage(lang: string): Promise<void>;
-  SetTrayLocale(locale: "en" | "zh" | "zh-TW"): Promise<void>;
+  SetTrayLocale(locale: "en" | "zh" | "zh-TW" | "es"): Promise<void>;
   // SetBypass is the legacy Wails name for YOLO/full-access tool auto-approval
   // (ask questions and plan approvals still wait; deny rules still apply).
   // Runtime-only.
@@ -5129,7 +5129,7 @@ function makeMockApp(): AppBindings {
     async CancelTaskForTab() { return { schema_version: 1, command: "cancel", task_id: "", accepted: false, idempotent: false, error: { code: "mock", message: "not available in browser mock" } }; },
     async RequeueTaskForTab() { return { schema_version: 1, command: "requeue", task_id: "", accepted: false, idempotent: false, error: { code: "mock", message: "not available in browser mock" } }; },
     async OpenTaskSessionForTab() { return { schema_version: 1, command: "open_session", task_id: "", accepted: false, idempotent: false, error: { code: "mock", message: "not available in browser mock" } }; },
-    async SetTrayLocale(_locale: "en" | "zh" | "zh-TW") {},
+    async SetTrayLocale(_locale: "en" | "zh" | "zh-TW" | "es") {},
     async SetAutoApproveTools(on: boolean) {
       await this.SetToolApprovalMode(on ? "yolo" : "ask");
     },

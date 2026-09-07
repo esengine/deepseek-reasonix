@@ -353,6 +353,7 @@ var ChineseTraditional = Messages{
 	ArgLanguageAuto:     "從 REASONIX_LANG / 系統 locale 自動偵測",
 	ArgLanguageEn:       "English",
 	ArgLanguageZh:       "中文",
+	ArgLanguageEs:       "西班牙文",
 
 	ListModelsHeaderFmt: "模型（當前：%s）",
 	ListModelsHint:      "用底部的模型切換器，或輸入 /model <provider/model>",

@@ -13,7 +13,7 @@ import (
 func TestCatalogsComplete(t *testing.T) {
 	en := reflect.ValueOf(English)
 	typ := en.Type()
-	catalogs := map[string]reflect.Value{"zh": reflect.ValueOf(Chinese), "zh-TW": reflect.ValueOf(ChineseTraditional)}
+	catalogs := map[string]reflect.Value{"zh": reflect.ValueOf(Chinese), "zh-TW": reflect.ValueOf(ChineseTraditional), "es": reflect.ValueOf(Spanish)}
 	for tag, cat := range catalogs {
 		for i := range typ.NumField() {
 			name := typ.Field(i).Name
@@ -45,6 +45,10 @@ func TestCatalogsAgreeOnPlaceholders(t *testing.T) {
 		if want != gotTW {
 			t.Errorf("%s: en has %d verbs, zh-TW has %d", name, want, gotTW)
 		}
+		gotES := countVerbs(reflect.ValueOf(Spanish).Field(i).String())
+		if want != gotES {
+			t.Errorf("%s: en has %d verbs, es has %d", name, want, gotES)
+		}
 	}
 }
 
@@ -57,6 +61,7 @@ func TestPlanApprovalChoicesExposeThreeExplicitActions(t *testing.T) {
 		{tag: "en", value: English.PlanApprovalChoices, want: []string{"Start execution", "Revise plan", "Exit without executing"}},
 		{tag: "zh", value: Chinese.PlanApprovalChoices, want: []string{"开始执行", "修改计划", "暂不执行，退出计划模式"}},
 		{tag: "zh-TW", value: ChineseTraditional.PlanApprovalChoices, want: []string{"開始執行", "修改計畫", "暫不執行，退出計畫模式"}},
+		{tag: "es", value: Spanish.PlanApprovalChoices, want: []string{"Iniciar la ejecución", "Revisar el plan", "Salir sin ejecutar"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.tag, func(t *testing.T) {
@@ -115,6 +120,12 @@ func TestNormalize(t *testing.T) {
 		"zh-Hant":             "zh-TW",
 		"Chinese Traditional": "zh-TW",
 		"繁體":                  "zh-TW",
+		"es":                  "es",
+		"es_ES.UTF-8":         "es",
+		"es-419":              "es",
+		"es_MX.UTF-8":         "es",
+		"Spanish":             "es",
+		"español":             "es",
 		"fr_FR.UTF-8":         "",
 		"  ZH_TW  ":           "zh-TW",
 	}
@@ -156,5 +167,8 @@ func TestDetectLanguagePriority(t *testing.T) {
 	}
 	if got := DetectLanguage("zh-TW"); got != "zh-TW" || CurrentLanguage() != "zh-TW" {
 		t.Errorf("traditional Chinese current language = %q/%q, want zh-TW", got, CurrentLanguage())
+	}
+	if got := DetectLanguage("es"); got != "es" || CurrentLanguage() != "es" {
+		t.Errorf("Spanish current language = %q/%q, want es", got, CurrentLanguage())
 	}
 }

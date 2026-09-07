@@ -6,7 +6,7 @@ import { useI18n, useT, type Locale } from "../lib/i18n";
 import type { CapabilityDiagnosticsReport, CapabilityIssue, RuntimeDoctorReport, SettingsTab } from "../lib/types";
 import { FrontendDiagnosticsControl } from "./FrontendDiagnosticsControl";
 
-const FRONTEND_COPY: Record<Locale, { title: string; hint: string }> = {
+const FRONTEND_COPY: Record<Exclude<Locale, "es">, { title: string; hint: string }> = {
   en: {
     title: "Frontend interaction recording",
     hint: "When scrolling jumps, sessions switch, or the UI flickers, turn this on, reproduce the issue, then turn it off and choose where to export. Only timing, events, and geometry are recorded; conversation content, input values, paths, and secrets are excluded.",
@@ -28,7 +28,7 @@ export function DiagnosticsSettingsPage({
 }) {
   const t = useT();
   const { locale } = useI18n();
-  const frontendCopy = FRONTEND_COPY[locale];
+  const frontendCopy = FRONTEND_COPY[locale as keyof typeof FRONTEND_COPY] ?? FRONTEND_COPY.en;
   const [report, setReport] = useState<CapabilityDiagnosticsReport | null>(null);
   const [runtimeDoctor, setRuntimeDoctor] = useState<RuntimeDoctorReport | null>(null);
   const [loading, setLoading] = useState(true);

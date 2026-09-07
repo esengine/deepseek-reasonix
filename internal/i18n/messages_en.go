@@ -366,6 +366,7 @@ var English = Messages{
 	ArgLanguageAuto:     "auto-detect from REASONIX_LANG / locale",
 	ArgLanguageEn:       "English",
 	ArgLanguageZh:       "中文",
+	ArgLanguageEs:       "Español",
 
 	ListModelsHeaderFmt: "models (active: %s)",
 	ListModelsHint:      "switch with the model switcher, or type /model <provider/model>",
