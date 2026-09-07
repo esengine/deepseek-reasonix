@@ -295,12 +295,13 @@ for (const path of localeChunks) {
   // The #9889/#9890 series adds recovery-wait, dialog-failure, and stall copy:
   // zh-TW measures 63492 B (62.004 KiB) with the four PRs merged together.
   // Integrated settings and ownership copy measures 61.415 / 62.212 KiB.
-  // The Spanish locale ships the same full 3,527-key dictionary; Spanish prose
-  // is longer than Chinese per key, so the measured es chunk is 61.7 KiB gzip.
+  // The Spanish locale ships the same full 3,527-key dictionary (grown to
+  // 3,627 with the upstream catalog keys); Spanish prose is longer than Chinese
+  // per key, so the measured es chunk is 62.2 KiB gzip on this base.
   // Retain a 0.1 KiB headroom at the next one-decimal ceiling.
   const budget = name.startsWith("zh-TW-") ? 62.3 * 1024
     : name.startsWith("zh-") ? 61.5 * 1024
-    : 61.8 * 1024;
+    : 62.3 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 

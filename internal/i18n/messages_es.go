@@ -527,6 +527,7 @@ var Spanish = Messages{
 	ProviderErrRateLimited:                 "Límite de tasa alcanzado (HTTP 429): demasiadas solicitudes (TPM/RPM). Se reintentó con backoff — reduce el ritmo o inténtalo de nuevo en un momento.",
 	ProviderErrServer:                      "Error de servidor (HTTP 500): el proveedor tuvo una falla interna. Se reintentó con backoff; si sigue fallando, inténtalo más tarde.",
 	ProviderErrServerBusy:                  "Servidor ocupado (HTTP 503): el proveedor está sobrecargado. Se reintentó con backoff; inténtalo de nuevo en un momento.",
+	ProviderErrWaitExhaustedFmt:            "Reasonix dejó de esperar tras %s: el proveedor siguió inaccesible en cada reintento. Revisa tu red, tu proxy o la página de estado del proveedor, y vuelve a enviar el mensaje.",
 	SelectOneHint:                          "(↑/↓ · Enter · q para cancelar; / para buscar)",
 	SelectManyHint:                         "(↑/↓ · Space · Enter · q; / para buscar)",
 	SelectMoreAboveFmt:                     "  ↑ %d más arriba",
