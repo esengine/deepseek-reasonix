@@ -30,7 +30,7 @@ type DiagnosticCopy = {
 
 // Keep diagnostic-only copy in this lazy chunk so stable builds do not carry
 // strings for a panel that is compiled out of the product surface.
-const COPY: Record<Locale, DiagnosticCopy> = {
+const COPY: Record<Exclude<Locale, "es">, DiagnosticCopy> = {
   en: {
     start: "Scroll diagnostics",
     startHint: "Start a local 90-second scroll trace",
@@ -107,7 +107,7 @@ export default function ScrollDiagnosticPanel({
   totalRows: number;
 }) {
   const { locale, t } = useI18n();
-  const copy = COPY[locale];
+  const copy = COPY[locale as keyof typeof COPY] ?? COPY.en;
   const { showToast } = useToast();
   const scrollElementRef = useRef(scrollElement);
   const totalRowsRef = useRef(totalRows);

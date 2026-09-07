@@ -798,7 +798,7 @@ const COMPACT_RATIO_PRESETS = [
 const REASONING_PROTOCOLS: readonly string[] = ["", "deepseek", "glm", "kimi-k3", "openai", "none"];
 const THINKING_MODES: readonly string[] = ["", "enabled", "disabled", "adaptive"];
 const PROXY_TYPES = ["http", "https", "socks5", "socks5h"] as const;
-const LANGUAGE_PREFS: LangPref[] = ["", "zh", "en"];
+const LANGUAGE_PREFS: LangPref[] = ["", "zh", "es", "en"];
 const TOOL_APPROVAL_MODES = ["ask", "auto", "yolo"] as const;
 const BOT_TOOL_APPROVAL_MODES = ["", "ask", "auto", "yolo"] as const;
 const BOT_QUEUE_MODES = ["steer", "followup", "collect", "interrupt"] as const;
@@ -1626,7 +1626,7 @@ function GeneralSection({ s, busy, apply, agentRunning }: SectionProps & { agent
               disabled={busy}
               onClick={() => setLanguage(pref)}
             >
-              {pref === "" ? t("settings.langAuto") : pref === "zh" ? "中文" : "English"}
+              {pref === "" ? t("settings.langAuto") : pref === "zh" ? "中文" : pref === "es" ? "Español" : "English"}
             </button>
           ))}
         </div>

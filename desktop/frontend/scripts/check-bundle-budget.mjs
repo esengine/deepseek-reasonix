@@ -53,7 +53,7 @@ const appShellCSSGzip = appShellCSS.reduce((total, path) => total + gzipBytes(pa
 const largestInitialJS = Math.max(...initialJS.map(gzipBytes));
 const largestInitialJSRaw = Math.max(...initialJS.map((path) => statSync(path).size));
 const localeChunks = readdirSync(resolve(distDir, "assets"))
-  .filter((name) => /^(?:zh|zh-TW)-.+\.js$/.test(name))
+  .filter((name) => /^(?:zh|zh-TW|es)-.+\.js$/.test(name))
   .map((name) => resolve(distDir, "assets", name));
 
 console.log("\nbundle budgets");
@@ -207,7 +207,11 @@ console.log("\nbundle budgets");
 // The latest main-v2 session-runtime fence and exact prompt protocol measure
 // 468.2 KiB here; retain a 0.1 KiB ceiling for platform zlib rounding.
 // Mainline provider/settings integration measures 469.230 KiB gzip.
-const initialJSBudgetKiB = 469.3;
+// Spanish (es) wiring — Locale union, LANGUAGE_PREFS, SPINNER_WORDS.es and the
+// /language picker label — adds ~0.2 KiB gzip on top of that base; the
+// 3,527-key es.ts dictionary stays in a lazy on-demand chunk. Retain a
+// 0.1 KiB ceiling for platform/zlib rounding.
+const initialJSBudgetKiB = 469.5;
 assertBudget("initial JavaScript gzip", initialJSGzip, initialJSBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk gzip", largestInitialJS, 280 * 1024);
 // Render-blocking CSS is intentionally absent: styles.css loads deferred via
@@ -232,8 +236,8 @@ if (initialCSS.length > 0) {
 // 0.1 KiB headroom ratchet.
 // Mainline provider/settings and recovery styles measure 119.435 KiB gzip.
 assertBudget("deferred app-shell CSS gzip", appShellCSSGzip, 119.5 * 1024);
-if (localeChunks.length !== 2) {
-  throw new Error(`expected 2 on-demand Chinese locale chunks, found ${localeChunks.length}`);
+if (localeChunks.length !== 3) {
+  throw new Error(`expected 3 on-demand locale chunks (zh, zh-TW, es), found ${localeChunks.length}`);
 }
 for (const path of localeChunks) {
   const name = basename(path);
@@ -291,7 +295,12 @@ for (const path of localeChunks) {
   // The #9889/#9890 series adds recovery-wait, dialog-failure, and stall copy:
   // zh-TW measures 63492 B (62.004 KiB) with the four PRs merged together.
   // Integrated settings and ownership copy measures 61.415 / 62.212 KiB.
-  const budget = name.startsWith("zh-TW-") ? 62.3 * 1024 : 61.5 * 1024;
+  // The Spanish locale ships the same full 3,527-key dictionary; Spanish prose
+  // is longer than Chinese per key, so the measured es chunk is 61.7 KiB gzip.
+  // Retain a 0.1 KiB headroom at the next one-decimal ceiling.
+  const budget = name.startsWith("zh-TW-") ? 62.3 * 1024
+    : name.startsWith("zh-") ? 61.5 * 1024
+    : 61.8 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
@@ -402,6 +411,8 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // UI to 2384.9 KiB. Retain 0.2 KiB headroom.
 // Mainline provider/settings integration measures 2398.2 KiB in the
 // extracted shell. Retain the same bounded 0.2 KiB build headroom.
-const rawInitialBudgetKiB = 2_398.4;
+// Spanish (es) wiring adds ~0.4 KiB raw on top (the dictionary itself is the
+// lazy es-*.js chunk, budgeted separately). Retain the same 0.2 KiB headroom.
+const rawInitialBudgetKiB = 2_398.8;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);

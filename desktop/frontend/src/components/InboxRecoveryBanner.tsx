@@ -27,7 +27,7 @@ export function InboxRecoveryBanner({
   onError: (error: unknown) => void;
 }) {
   const { locale } = useI18n();
-  const [recoveredTitle, pausedTitle, body, review, resume, keepPaused, paused] = COPY[locale];
+  const [recoveredTitle, pausedTitle, body, review, resume, keepPaused, paused] = COPY[locale as keyof typeof COPY] ?? COPY.en;
   const title = recovered ? recoveredTitle.replace("{n}", String(count)) : pausedTitle;
   const [busy, setBusy] = useState(false);
   const [keptPaused, setKeptPaused] = useState(false);

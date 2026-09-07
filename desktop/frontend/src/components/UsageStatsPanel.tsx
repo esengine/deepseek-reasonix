@@ -200,7 +200,7 @@ function localDay(offsetDays: number): string {
 
 export function UsageStatsPanel() {
   const { locale } = useI18n();
-  const t = useCallback<UsageStatsTranslator>((key) => USAGE_STATS_TRANSLATIONS[locale][key], [locale]);
+  const t = useCallback<UsageStatsTranslator>((key) => (USAGE_STATS_TRANSLATIONS[locale as keyof typeof USAGE_STATS_TRANSLATIONS] ?? USAGE_STATS_TRANSLATIONS.en)[key], [locale]);
   const [range, setRange] = useState<string>("30");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");

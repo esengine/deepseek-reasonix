@@ -208,7 +208,7 @@ const heartbeatFeatureZhTW = {
 
 export const heartbeatFeatureKeys = Object.keys(heartbeatFeatureEn) as HeartbeatFeatureKey[];
 
-const heartbeatFeatureDictionaries: Record<Locale, Record<HeartbeatFeatureKey, string>> = {
+const heartbeatFeatureDictionaries: Record<Exclude<Locale, "es">, Record<HeartbeatFeatureKey, string>> = {
   en: heartbeatFeatureEn,
   zh: heartbeatFeatureZh,
   "zh-TW": heartbeatFeatureZhTW,
@@ -224,7 +224,8 @@ function interpolate(message: string, vars?: Record<string, string | number>): s
 export function useHeartbeatT(): HeartbeatTranslator {
   const { locale, t } = useI18n();
   return useCallback<HeartbeatTranslator>((key, vars) => {
-    const message = heartbeatFeatureDictionaries[locale][key as HeartbeatFeatureKey];
+    const dict = heartbeatFeatureDictionaries[locale as keyof typeof heartbeatFeatureDictionaries] ?? heartbeatFeatureDictionaries.en;
+    const message = dict[key as HeartbeatFeatureKey];
     return message === undefined ? t(key as DictKey, vars) : interpolate(message, vars);
   }, [locale, t]);
 }

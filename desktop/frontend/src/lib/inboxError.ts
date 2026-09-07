@@ -25,7 +25,7 @@ const UNKNOWN_INDEX = 13;
 const STEER_QUEUED_INDEX = 14;
 const CANCEL_FAILED_INDEX = 15;
 
-const ERROR_COPY: Record<Locale, readonly string[]> = {
+const ERROR_COPY: Record<Exclude<Locale, "es">, readonly string[]> = {
   en: [
     "Inbox is paused",
     "The inbox has reached its item limit",
@@ -109,11 +109,13 @@ export function formatInboxError(error: unknown, locale: Locale): string {
   const code = encodedCode || legacyCode;
   if (!code) return raw;
   const index = CODE_INDEX[code as InboxErrorCode];
-  return ERROR_COPY[locale][index ?? UNKNOWN_INDEX];
+  const copy = ERROR_COPY[locale as keyof typeof ERROR_COPY] ?? ERROR_COPY.en;
+  return copy[index ?? UNKNOWN_INDEX];
 }
 
 export function inboxSteerQueuedMessage(locale: Locale): string {
-  return ERROR_COPY[locale][STEER_QUEUED_INDEX];
+  const copy = ERROR_COPY[locale as keyof typeof ERROR_COPY] ?? ERROR_COPY.en;
+  return copy[STEER_QUEUED_INDEX];
 }
 
 export function isInboxItemMissing(error: unknown): boolean {
@@ -127,5 +129,6 @@ export function isTurnNotRunning(error: unknown): boolean {
 }
 
 export function formatInboxCancelError(error: unknown, locale: Locale): string {
-  return ERROR_COPY[locale][CANCEL_FAILED_INDEX].replace("{error}", formatInboxError(error, locale));
+  const copy = ERROR_COPY[locale as keyof typeof ERROR_COPY] ?? ERROR_COPY.en;
+  return copy[CANCEL_FAILED_INDEX].replace("{error}", formatInboxError(error, locale));
 }

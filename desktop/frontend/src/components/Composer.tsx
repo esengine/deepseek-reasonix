@@ -3814,7 +3814,7 @@ export function Composer({
   const runTicker = !retry && !pauseWorkClock && running && turnStartAt
     ? (() => {
         const elapsedMs = Math.max(0, now - turnStartAt - waitAccumMs);
-        const words = SPINNER_WORDS[locale];
+        const words = SPINNER_WORDS[locale] ?? SPINNER_WORDS.en;
         const word = words[Math.floor(elapsedMs / 3000) % words.length];
         const usageTokens = turnTokens ?? 0;
         // Include streaming tool-call args in the estimate so TPS stays

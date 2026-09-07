@@ -10,7 +10,7 @@ import {
 } from "../lib/frontendDiagnostics";
 
 const defaultFilename = (reportId: string) => `reasonix-frontend-diagnostics-${reportId.slice(0, 8) || "trace"}.json`;
-const COPY: Record<Locale, {
+const COPY: Record<Exclude<Locale, "es">, {
   start: string;
   startHint: string;
   recordingLabel: string;
@@ -72,7 +72,7 @@ export function FrontendDiagnosticsControl({
   embedded = false,
 }: FrontendDiagnosticsControlProps) {
   const { locale } = useI18n();
-  const copy = COPY[locale];
+  const copy = COPY[locale as keyof typeof COPY] ?? COPY.en;
   const scrollElementRef = useRef<HTMLElement | null>(scrollElement ?? null);
   const totalRowsRef = useRef(totalRows);
   scrollElementRef.current = scrollElement ?? null;
