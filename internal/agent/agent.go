@@ -1459,7 +1459,22 @@ func (a *Agent) advanceCanonicalTodo(step string) {
 		return
 	}
 	m, ok := evidence.MatchStep(step, a.sess.todoState)
-	if !ok || !evidence.AdvanceSerialTodo(a.sess.todoState, m.Index-1) {
+	if !ok {
+		// The sign-off cites a step the canonical list does not know — most
+		// often a list left over from an earlier session generation whose step
+		// ids no longer match. Staying silent here taught models the todo
+		// system was "locked" and they stopped signing off at all (#9249);
+		// say what happened and what repairs it instead.
+		a.sess.todoMu.Unlock()
+		a.svc.sink.Emit(event.Event{
+			Kind:  event.Notice,
+			Level: event.LevelWarn,
+			Text:   unmatchedStepSignOffNotice,
+			Detail: "unmatched step sign-off: " + step,
+		})
+		return
+	}
+	if !evidence.AdvanceSerialTodo(a.sess.todoState, m.Index-1) {
 		a.sess.todoMu.Unlock()
 		return
 	}
@@ -1468,6 +1483,10 @@ func (a *Agent) advanceCanonicalTodo(step string) {
 	a.recordTodoState(snapshot)
 	a.emitTodoState(snapshot, m.Index)
 }
+
+// unmatchedStepSignOffNotice is the host guidance for a signed-off step the
+// canonical todo list does not know (#9249).
+const unmatchedStepSignOffNotice = "A signed-off step did not match the canonical todo list (it may be stale from an earlier session). Re-issue todo_write with the steps you are actually working now, then sign off against those ids; already-verified work is not affected."
 
 // emitTodoState emits a synthetic todo_write event so the frontend task panel
 // reflects a host-advanced completion without the model re-sending the list.
