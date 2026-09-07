@@ -599,10 +599,12 @@ func fetchBalance(ctrl control.Status) tea.Cmd {
 			return balanceMsg{}
 		}
 		displayCurrency := ""
+		mode := billing.DisplayAll
 		if cfg, err := config.LoadForRootReadOnly("."); err == nil && cfg != nil {
 			displayCurrency = cfg.ExplicitDisplayCurrency()
+			mode = cfg.ShowBalanceMode()
 		}
-		return balanceMsg{text: b.DisplayForCurrency(displayCurrency)}
+		return balanceMsg{text: b.DisplayForMode(displayCurrency, mode)}
 	}
 }
 
@@ -4738,6 +4740,9 @@ func (m *chatTUI) runSlashCommand(input string) tea.Cmd {
 	case "/currency":
 		m.echoLocalCommand(input)
 		return m.runCurrencySubcommand(input)
+	case "/show-balance":
+		m.echoLocalCommand(input)
+		return m.runShowBalanceCommand(input)
 	case "/help", "/web":
 		return m.runHelpOrWebSlash(input, typedCmd)
 	case "/memory":

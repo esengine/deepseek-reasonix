@@ -210,6 +210,10 @@ var English = Messages{
 	CurrencyHeader:            "fee display currency:",
 	CurrencyHint:              "switch with /currency <auto|CNY|USD>",
 	CurrencyChangedFmt:        "fee display currency set to %s (resolved: %s)",
+	CmdShowBalance:            "set how the wallet balance is shown: all, part, or no",
+	ShowBalanceHeader:         "wallet balance display:",
+	ShowBalanceHint:           "switch with /show-balance <all|part|no>",
+	ShowBalanceChangedFmt:     "wallet balance display set to %s",
 	RuntimeRefreshBusy:        "finish or cancel active work and stop background jobs before changing this setting",
 	RuntimeRefreshUnavailable: "runtime refresh is unavailable in this session",
 

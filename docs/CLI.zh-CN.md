@@ -95,6 +95,13 @@ CLI 使用原币或按 ISO 排序的币种桶。语言和主机 locale 不再选
 在交互式会话中，`/currency` 显示已保存值和最终解析结果；
 `/currency auto|CNY|USD` 会修改偏好并刷新当前运行时，同时保留当前对话。
 
+在交互式会话中，`/show-balance` 列出三种显示模式并标记当前项；
+`/show-balance all|part|no` 设置状态栏的钱包余额显示方式：`all` 完整显示，
+`part` 将百位以上的数字用一个前导 `*` 遮挡（百位及以下固定三位、不足补零），
+`no` 完全不显示金额（显示 `***`）。偏好写入用户全局 `[billing].show_balance`，
+跨会话持久生效。默认 `all`，未配置时保持完整显示。支持别名 `full`、
+`partial`/`mask`、`off`/`hide`/`none`。
+
 ### 配置自动压缩阈值
 
 桌面端与 CLI 共用用户全局的自动压缩阈值。可以查看当前生效值及来源、修改全局默认值，
@@ -391,6 +398,7 @@ SSH 下远端进程无法读取本机剪贴板，请使用终端粘贴快捷键�
 | `/status` | 显示模型、effort、cache、Git、后台任务和余额信息。 |
 | `/theme [auto\|light\|dark\|style]` | 查看或切换 CLI 背景模式和强调色。 |
 | `/currency [auto\|CNY\|USD]` | 查看或切换用户全局费用展示币种，并刷新当前运行时。 |
+| `/show-balance [all\|part\|no]` | 查看或设置状态栏钱包余额显示方式（完整、遮挡或隐藏）。 |
 | `/paste-image` | 读取剪贴板图片并插入可编辑的附件标记。 |
 | `/mouse` | 切换应用内鼠标选区、滚动条和滚轮处理；SSH 会话默认关闭接管，保证终端原生选区可用。 |
 | `/effort` | 查看或切换 reasoning effort。 |

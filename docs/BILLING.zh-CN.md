@@ -13,6 +13,7 @@ Reasonix 将三类事实分开：
 ```toml
 [billing]
 display_currency = "auto"   # auto | CNY | USD
+show_balance = "all"        # all | part | no — 状态栏钱包余额显示方式
 
 [[providers]]
 billing_currency = "USD"    # 价表基准币种，不代表实际结算币种
@@ -23,6 +24,10 @@ billing_mode = "payg"       # payg | subscription_equivalent
 `auto` 在配置层保持未解析：单一有效钱包币种可以成为当前 tab/session 的运行时
 提示；否则单一原币直接展示，混币则按币种分桶。语言、浏览器 locale、主机区域都不再
 改变价表。
+
+`[billing].show_balance` 决定 CLI 与桌面状态栏如何渲染钱包余额：
+`all`（默认）完整显示；`part` 将百位以上的数字用一个前导 `*` 遮挡；
+`no` 用 `***` 完全隐藏金额。桌面悬停详情与 serve API 始终保留完整余额。
 
 ## CostQuote
 

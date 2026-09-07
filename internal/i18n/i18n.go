@@ -232,6 +232,10 @@ type Messages struct {
 	CurrencyHeader            string // header above the /currency listing
 	CurrencyHint              string // how to select a pricing currency
 	CurrencyChangedFmt        string // "/currency <mode>" succeeded, %s = saved mode, %s = resolved currency
+	CmdShowBalance            string // help text for /show-balance
+	ShowBalanceHeader         string // header above the /show-balance status
+	ShowBalanceHint           string // how to select a balance display mode
+	ShowBalanceChangedFmt     string // "/show-balance <mode>" succeeded, %s = saved mode
 	RuntimeRefreshBusy        string // runtime-affecting setting cannot change while work is active
 	RuntimeRefreshUnavailable string // current session cannot rebuild after a runtime-affecting setting change
 

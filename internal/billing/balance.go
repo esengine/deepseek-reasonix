@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"sort"
 	"strings"
@@ -151,11 +152,44 @@ func symbol(currency string) string {
 	}
 }
 
+// BalanceDisplayMode selects how a wallet balance is rendered on a status bar.
+type BalanceDisplayMode string
+
+const (
+	// DisplayAll renders the full amount (e.g. "¥14123.19").
+	DisplayAll BalanceDisplayMode = "all"
+	// DisplayPart masks digits above the hundreds place (e.g. "¥*123.19").
+	DisplayPart BalanceDisplayMode = "part"
+	// DisplayNo hides the amount entirely ("***").
+	DisplayNo BalanceDisplayMode = "no"
+)
+
 // Display renders the primary balance compactly, e.g. "¥110.00". It preserves
 // the legacy CNY-first behavior for callers that have no display-currency
 // preference.
 func (b *Balance) Display() string {
 	return b.DisplayForCurrency("")
+}
+
+// DisplayMasked renders the balance like Display but hides every digit above
+// the hundreds place behind a leading "*" (see MaskAboveHundreds), so a status
+// bar never exposes the full wallet amount.
+func (b *Balance) DisplayMasked() string {
+	return b.DisplayMaskedForCurrency("")
+}
+
+// DisplayForMode renders the balance according to the given display mode:
+// DisplayAll behaves like DisplayForCurrency, DisplayPart like
+// DisplayMaskedForCurrency, and DisplayNo returns "***" whenever a balance is
+// present (an absent balance still renders as "").
+func (b *Balance) DisplayForMode(currency string, mode BalanceDisplayMode) string {
+	if mode == DisplayNo {
+		if b == nil || len(b.Infos) == 0 {
+			return ""
+		}
+		return "***"
+	}
+	return b.displayForCurrency(currency, mode == DisplayPart)
 }
 
 // DisplayForCurrency renders the balance matching the requested pricing
@@ -164,15 +198,33 @@ func (b *Balance) Display() string {
 // currency (for example "CNY ¥70.16"); it never performs an implicit
 // exchange-rate conversion.
 func (b *Balance) DisplayForCurrency(currency string) string {
+	return b.displayForCurrency(currency, false)
+}
+
+// DisplayMaskedForCurrency is DisplayForCurrency with the high digits masked.
+func (b *Balance) DisplayMaskedForCurrency(currency string) string {
+	return b.displayForCurrency(currency, true)
+}
+
+// displayForCurrency is the shared selection/render path behind Display and
+// DisplayMasked variants. masked enables MaskAboveHundreds on the amount.
+func (b *Balance) displayForCurrency(currency string, masked bool) string {
 	if b == nil || len(b.Infos) == 0 {
 		return ""
+	}
+	render := func(i Info) string {
+		amount := strings.TrimSpace(i.TotalBalance)
+		if masked {
+			amount = MaskAboveHundreds(amount)
+		}
+		return symbol(i.Currency) + amount
 	}
 	pick := b.Infos[0]
 	preferred := normalizeCurrency(currency)
 	if preferred != "" {
 		for _, i := range b.Infos {
 			if normalizeCurrency(i.Currency) == preferred {
-				return symbol(i.Currency) + strings.TrimSpace(i.TotalBalance)
+				return render(i)
 			}
 		}
 	}
@@ -182,7 +234,7 @@ func (b *Balance) DisplayForCurrency(currency string) string {
 			break
 		}
 	}
-	display := symbol(pick.Currency) + strings.TrimSpace(pick.TotalBalance)
+	display := render(pick)
 	actual := strings.ToUpper(strings.TrimSpace(pick.Currency))
 	if normalized := normalizeCurrency(actual); normalized != "" {
 		actual = normalized
@@ -191,6 +243,52 @@ func (b *Balance) DisplayForCurrency(currency string) string {
 		return actual + " " + display
 	}
 	return display
+}
+
+// MaskAboveHundreds hides every digit above the hundreds place behind a single
+// leading "*": "14123.19" becomes "*123.19". The hundreds place always keeps
+// its full three-digit width, zero-padded ("10000.82" → "*000.82"). Balances
+// of at most 999 pass through unchanged ("745.85"), as does anything that is
+// not a plain decimal amount, so unparseable provider values stay exactly as
+// received. The original decimal width is preserved, and a leading sign is
+// kept ("-14123.19" → "-*123.19").
+func MaskAboveHundreds(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return raw
+	}
+	sign := ""
+	switch s[0] {
+	case '-', '+':
+		sign, s = s[:1], s[1:]
+	}
+	intPart, fracPart, hasFrac := strings.Cut(s, ".")
+	if !isDecimalDigits(intPart) || (hasFrac && !isDecimalDigits(fracPart)) {
+		return raw
+	}
+	n, ok := new(big.Int).SetString(intPart, 10)
+	if !ok || n.Cmp(big.NewInt(999)) <= 0 {
+		return raw
+	}
+	masked := new(big.Int).Mod(n, big.NewInt(1000))
+	out := fmt.Sprintf("*%03d", masked.Int64())
+	if hasFrac {
+		out += "." + fracPart
+	}
+	return sign + out
+}
+
+// isDecimalDigits reports whether s is non-empty and ASCII digits only.
+func isDecimalDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func normalizeCurrency(currency string) string {

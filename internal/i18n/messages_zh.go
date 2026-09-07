@@ -211,6 +211,10 @@ var Chinese = Messages{
 	CurrencyHeader:            "费用展示币种：",
 	CurrencyHint:              "使用 /currency <auto|CNY|USD> 切换",
 	CurrencyChangedFmt:        "费用展示币种已设为 %s（当前解析为：%s）",
+	CmdShowBalance:            "设置钱包余额显示方式：all、part 或 no",
+	ShowBalanceHeader:         "钱包余额显示：",
+	ShowBalanceHint:           "使用 /show-balance <all|part|no> 切换",
+	ShowBalanceChangedFmt:     "余额显示已设为 %s",
 	RuntimeRefreshBusy:        "请先完成或取消当前工作，并停止后台任务后再修改此设置",
 	RuntimeRefreshUnavailable: "本会话不支持刷新运行时",
 

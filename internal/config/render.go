@@ -143,6 +143,11 @@ func RenderTOMLForScope(c *Config, scope RenderScope) string {
 		} else {
 			b.WriteString("# display_currency = \"auto\"   # auto|CNY|USD; display only — does not rewrite provider list prices\n")
 		}
+		if show := c.Billing.ShowBalance; show != "" {
+			fmt.Fprintf(&b, "show_balance = %q   # all shows the full wallet balance; part masks digits above the hundreds place; no hides it\n", show)
+		} else {
+			b.WriteString("# show_balance = \"all\"   # all shows the full wallet balance; part masks digits above the hundreds place; no hides it\n")
+		}
 		b.WriteString("\n")
 	} else if c.Desktop.ProviderAccess != nil {
 		// provider_access is intentionally mergeable across user and project

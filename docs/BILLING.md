@@ -15,6 +15,7 @@ new quotes never generate them.
 ```toml
 [billing]
 display_currency = "auto"   # auto | CNY | USD
+show_balance = "all"        # all | part | no — status-bar wallet balance display
 
 [[providers]]
 billing_currency = "USD"    # pricing-table basis, not settlement currency
@@ -26,6 +27,12 @@ Legacy `[desktop].currency` remains readable and migrates to
 one valid wallet currency may become a tab/session hint; otherwise a single
 original currency is selected or mixed currencies are shown as buckets. A
 language, browser locale, or host region never changes a rate card.
+
+`[billing].show_balance` selects how the CLI and desktop status bars render
+the wallet balance: `all` (default) shows the full amount, `part` masks digits
+above the hundreds place behind a leading `*`, and `no` replaces the amount
+with `***`. The desktop hover detail and the serve API always keep the full
+amount.
 
 ## CostQuote
 

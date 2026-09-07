@@ -108,6 +108,16 @@ In an interactive session, `/currency` shows the saved and resolved values, and
 `/currency auto|CNY|USD` changes the preference and refreshes the current
 runtime without discarding the conversation.
 
+In an interactive session, `/show-balance` lists the three display modes with
+the current one marked, and `/show-balance all|part|no` pins how the status bar
+renders the wallet balance: `all` shows the full amount, `part` masks every
+digit above the hundreds place behind a leading `*` (the hundreds place stays
+zero-padded to three digits), and `no` hides the amount entirely as `***`.
+The preference is saved to the user-global `[billing].show_balance` and
+survives sessions. `all` is the default, so unconfigured setups keep the full
+balance visible. Aliases `full`, `partial`/`mask`, and `off`/`hide`/`none` are
+accepted.
+
 ### Configure automatic compaction
 
 The desktop app and CLI share the user-global automatic compaction threshold.
@@ -456,6 +466,7 @@ the displayed list matches the commands the TUI accepts.
 | `/status` | Show model, effort, cache, Git, background jobs, and balance details. |
 | `/theme [auto\|light\|dark\|style]` | View or change the CLI background mode and accent palette. |
 | `/currency [auto\|CNY\|USD]` | View or change the user-global fee display currency and refresh the runtime. |
+| `/show-balance [all\|part\|no]` | View or change how the status bar renders the wallet balance (full, masked, or hidden). |
 | `/paste-image` | Read a clipboard image and insert an editable attachment token. |
 | `/mouse` | Toggle in-app mouse selection, scrollbar, and wheel handling; SSH sessions start with capture off so the terminal's native selection works. |
 | `/effort` | View or change reasoning effort. |

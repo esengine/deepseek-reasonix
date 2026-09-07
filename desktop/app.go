@@ -6446,7 +6446,7 @@ func (a *App) BalanceForTab(tabID string) BalanceInfo {
 	if b == nil {
 		return BalanceInfo{} // provider declares no balance endpoint
 	}
-	display := b.DisplayForCurrency(currency)
+	display := b.DisplayForMode(currency, a.balanceDisplayMode())
 	currencies := b.Currencies()
 	primary := b.PrimaryCurrency()
 	a.applyBalanceDisplayHint(tabID, tab, ctrl, currency, primary, generation)
@@ -6498,6 +6498,16 @@ func (a *App) balanceDisplayCurrency() string {
 		return pref
 	}
 	return cfg.ExplicitDisplayCurrency()
+}
+
+// balanceDisplayMode resolves the wallet display mode (all|part|no) from the
+// user config, defaulting to the full amount.
+func (a *App) balanceDisplayMode() billing.BalanceDisplayMode {
+	cfg, _, err := a.loadDesktopUserConfigForView()
+	if err != nil {
+		return billing.DisplayAll
+	}
+	return cfg.ShowBalanceMode()
 }
 
 // JobView is one running background job (bash/task started with

@@ -13,6 +13,11 @@ import (
 type BillingConfig struct {
 	// DisplayCurrency is auto|CNY|USD. Empty equals auto.
 	DisplayCurrency string `toml:"display_currency"`
+	// ShowBalance controls how the CLI/desktop status bar renders the wallet
+	// balance: "all" (full amount, the default), "part" (digits above the
+	// hundreds place masked behind a leading "*"), or "no" (balance replaced
+	// by "***"). Empty equals "all".
+	ShowBalance string `toml:"show_balance"`
 }
 
 // DisplayCurrencyPref returns the user preference: "" (auto), "CNY", or "USD".
@@ -31,6 +36,41 @@ func (c *Config) DisplayCurrencyPref() string {
 // is intentional: auto is resolved by a quote/wallet presentation surface.
 func (c *Config) ExplicitDisplayCurrency() string {
 	return c.DisplayCurrencyPref()
+}
+
+// ShowBalanceMode returns how status bars render the wallet balance:
+// billing.DisplayAll (default), billing.DisplayPart, or billing.DisplayNo.
+// Unknown or empty values fall back to the default.
+func (c *Config) ShowBalanceMode() billing.BalanceDisplayMode {
+	if c == nil {
+		return billing.DisplayAll
+	}
+	switch strings.ToLower(strings.TrimSpace(c.Billing.ShowBalance)) {
+	case "part":
+		return billing.DisplayPart
+	case "no", "off", "hide", "none":
+		return billing.DisplayNo
+	default:
+		return billing.DisplayAll
+	}
+}
+
+// SetShowBalanceMode pins how status bars render the wallet balance.
+func (c *Config) SetShowBalanceMode(mode string) error {
+	if c == nil {
+		return fmt.Errorf("nil config")
+	}
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", "all", "full", "on", "show":
+		c.Billing.ShowBalance = ""
+	case "part", "partial", "mask", "masked":
+		c.Billing.ShowBalance = "part"
+	case "no", "off", "hide", "none":
+		c.Billing.ShowBalance = "no"
+	default:
+		return fmt.Errorf("show balance %q: must be all|part|no", mode)
+	}
+	return nil
 }
 
 // ResolveDisplayCurrency is retained for callers that need a compatibility
@@ -55,8 +95,7 @@ func normalizeDisplayCurrency(currency string) string {
 
 // SetDisplayCurrency pins the global display currency preference. It does not
 // rewrite provider billing currencies or official price tables.
-func (c *Config) SetDisplayCurrency(currency string) error {
-	if c == nil {
+func (c *Config) SetDisplayCurrency(currency string) error {	if c == nil {
 		return fmt.Errorf("nil config")
 	}
 	switch strings.ToUpper(strings.TrimSpace(currency)) {

@@ -205,6 +205,10 @@ var ChineseTraditional = Messages{
 	CurrencyHeader:            "費用展示幣種：",
 	CurrencyHint:              "使用 /currency <auto|CNY|USD> 切換",
 	CurrencyChangedFmt:        "費用展示幣種已設為 %s（目前解析為：%s）",
+	CmdShowBalance:            "設定錢包餘額顯示方式：all、part 或 no",
+	ShowBalanceHeader:         "錢包餘額顯示：",
+	ShowBalanceHint:           "使用 /show-balance <all|part|no> 切換",
+	ShowBalanceChangedFmt:     "餘額顯示已設為 %s",
 	RuntimeRefreshBusy:        "請先完成或取消目前工作，並停止背景任務後再修改此設定",
 	RuntimeRefreshUnavailable: "本會話不支援重新整理執行階段",
 
