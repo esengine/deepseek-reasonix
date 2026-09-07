@@ -75,6 +75,9 @@ const (
 	// ToolResult for long tools like bash so a frontend can show live progress.
 	// Appended last to keep the Kind values before it wire-stable.
 	ToolProgress
+	// ToolStarted is the durable execution barrier after dispatch and before
+	// invoking a tool. It is distinct from ToolDispatch for UI compatibility.
+	ToolStarted
 	// MCPSurfaceReady fires once per server when its background-loaded surface
 	// (prompts or resources) finishes after startup. Lets UIs refresh /mcp
 	// status without polling. Text carries "<server>: <surface> ready (<count>
@@ -235,9 +238,12 @@ type Tool struct {
 	CapabilityID string
 	Output       string // ToolResult: the result text fed to the model
 	Err          string // ToolResult: non-empty when the call failed or was blocked
-	ReadOnly     bool
-	Truncated    bool  // ToolResult: Output was head+tailed before display/model
-	DurationMs   int64 // ToolResult: wall-clock execution time in milliseconds
+	// RunState is host-local execution evidence (pending/running/completed/
+	// failed/cancelled/unknown). It is never sent to the provider.
+	RunState   string
+	ReadOnly   bool
+	Truncated  bool  // ToolResult: Output was head+tailed before display/model
+	DurationMs int64 // ToolResult: wall-clock execution time in milliseconds
 	// StartedAt/EndedAt are unix-millisecond execution bounds (ToolResult).
 	// Zero when the call never ran (dependency-skipped, cancelled, synthetic).
 	StartedAt int64
@@ -886,17 +892,3 @@ func EmitChecked(s Sink, e Event) error {
 	s.Emit(e)
 	return nil
 }
-
-// FuncSink adapts a plain function to a Sink.
-type FuncSink func(Event)
-
-// Emit calls the wrapped function.
-func (f FuncSink) Emit(e Event) {
-	if f != nil {
-		f(e)
-	}
-}
-
-// Discard is a Sink that drops every event. Useful in tests and for runs that
-// only care about the final session state.
-var Discard Sink = FuncSink(func(Event) {})

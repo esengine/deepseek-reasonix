@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"reasonix/internal/provider"
@@ -132,6 +133,12 @@ func (a *Agent) buildSamplingRequest(ctx context.Context, trigger string) (sampl
 	req, err = a.interceptProviderRequest(ctx, req)
 	if err != nil {
 		return samplingRequest{}, err
+	}
+	// Adapters normalize pairing on the wire copy; validating the same view
+	// here refuses a transcript no adapter could send instead of letting a
+	// truncated or unpaired call reach the provider (#9566).
+	if err := provider.ValidateTranscript(provider.SanitizeToolPairing(provider.ModelMessages(req.Messages))); err != nil {
+		return samplingRequest{}, fmt.Errorf("provider transcript rejected before send: %w", err)
 	}
 	return samplingRequest{req: req}, nil
 }

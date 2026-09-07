@@ -84,6 +84,10 @@ type Approvals interface {
 	// ResolveRecovery answers an Auto Guard card: continue|continue_task|revise. Revise
 	// refuses the mutation and steers feedback.
 	ResolveRecovery(id string, action agent.RecoveryAction, feedback string) error
+	// ConfirmRecoveredTool attests that one unverified tool effect from an
+	// interrupted turn already happened. It records the attestation and never
+	// synthesizes the missing tool result.
+	ConfirmRecoveredTool(callID string) error
 	AnswerMCPInteraction(id, action string, content map[string]any)
 	AnswerQuestion(id string, answers []event.AskAnswer)
 	AnswerQuestionChecked(id string, answers []event.AskAnswer) error

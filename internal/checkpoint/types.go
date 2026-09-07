@@ -296,3 +296,30 @@ const (
 	DefaultBlobQuotaBytes    = 1 << 30  // 1 GiB
 	DefaultMaxFileBytes      = 32 << 20 // 32 MiB per file capture
 )
+
+// Checkpoint anchors the pre-edit state of every distinct file touched during one
+// user turn. MsgIndex is len(Session.Messages) at the turn's start — the
+// conversation-rewind boundary — persisted so a resumed session can rewind the
+// conversation and fork, not just the code.
+type Checkpoint struct {
+	SchemaVersion       int            `json:"schemaVersion,omitempty"`
+	Turn                int            `json:"turn"`
+	Time                time.Time      `json:"time"`
+	Prompt              string         `json:"prompt"`
+	MsgIndex            int            `json:"msgIndex"`
+	SessionID           string         `json:"sessionId,omitempty"`
+	Files               []FileSnap     `json:"files"`
+	Coverage            Coverage       `json:"coverage,omitempty"`
+	CoverageGaps        []CoverageGap  `json:"coverageGaps,omitempty"`
+	ActiveWriters       []ActiveWriter `json:"activeWriters,omitempty"`
+	LastMutationSeq     int64          `json:"lastMutationSeq,omitempty"`
+	SessionRevision     int64          `json:"sessionRevision,omitempty"`
+	TurnID              string         `json:"turnId,omitempty"`
+	AttemptID           string         `json:"attemptId,omitempty"`
+	ToolCallID          string         `json:"toolCallId,omitempty"`
+	ToolArgumentsDigest string         `json:"toolArgumentsDigest,omitempty"`
+	ProviderDigest      string         `json:"providerDigest,omitempty"`
+	WorkspaceReference  string         `json:"workspaceReference,omitempty"`
+	Legacy              bool           `json:"legacy,omitempty"`
+	ExpiredFilePayload  bool           `json:"expiredFilePayload,omitempty"`
+}

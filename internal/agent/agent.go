@@ -2018,7 +2018,7 @@ func (a *Agent) recordInterruptedDisplay(text, reasoning string, calls []provide
 			continue
 		}
 		seen[key] = struct{}{}
-		displayCalls = append(displayCalls, provider.ToolCall{ID: call.ID, Name: name})
+		displayCalls = append(displayCalls, provider.ToolCall{ID: call.ID, Name: name, Arguments: call.Arguments})
 		if name != "" {
 			interrupted = append(interrupted, name)
 			notStarted = append(notStarted, provider.InterruptedToolSummary{ID: call.ID, Name: name})
@@ -2034,9 +2034,19 @@ func (a *Agent) recordInterruptedDisplay(text, reasoning string, calls []provide
 		WorkDurationMs:   workDurationMs,
 		LocalOnly:        true,
 		InterruptedTurn: &provider.InterruptedTurnRecovery{
-			Pending:                 pending,
-			InterruptedTools:        interrupted,
-			NotStartedTools:         notStarted,
+			Pending:            pending,
+			Cause:              "host_interruption",
+			SilentInterruption: pending && strings.TrimSpace(text) == "" && strings.TrimSpace(reasoning) == "" && len(calls) == 0,
+			DisplayOnlyPartial: strings.TrimSpace(text) != "" || strings.TrimSpace(reasoning) != "",
+			InterruptedTools:   interrupted,
+			NotStartedTools:    notStarted,
+			ToolCalls: func() []provider.ToolCallRecord {
+				records := make([]provider.ToolCallRecord, 0, len(calls))
+				for _, call := range calls {
+					records = append(records, provider.ToolCallRecord{ID: call.ID, Name: call.Name, Arguments: []byte(call.Arguments), State: provider.ToolRunNotStarted})
+				}
+				return records
+			}(),
 			DroppedPartialText:      strings.TrimSpace(text) != "",
 			DroppedPartialReasoning: strings.TrimSpace(reasoning) != "",
 		},
@@ -2115,7 +2125,7 @@ func toProviderToolExecution(in *tool.ShellExecution) *provider.ToolExecution {
 func (a *Agent) emitFullToolDispatch(ctx context.Context, c provider.ToolCall, refreshed bool) error {
 	t, _, ambiguous := a.svc.tools.ResolveCall(c.Name)
 	ok := t != nil && len(ambiguous) == 0
-	ev := event.Tool{ID: c.ID, Name: c.Name, Args: c.Arguments, ReadOnly: ok && t.ReadOnly(), Refreshed: refreshed}
+	ev := event.Tool{ID: c.ID, Name: c.Name, Args: c.Arguments, ReadOnly: ok && t.ReadOnly(), Refreshed: refreshed, RunState: string(provider.ToolRunPending)}
 	ev.FileDiff = event.FileDiff{Diff: c.Diff, Added: c.Added, Removed: c.Removed}
 	if ok && ev.Diff == "" && ev.Added == 0 && ev.Removed == 0 {
 		if ch, ok := tool.PreviewChange(ctx, t, json.RawMessage(c.Arguments)); ok {
@@ -2154,6 +2164,7 @@ func (a *Agent) emitResolvedToolDispatch(c provider.ToolCall) {
 		CapabilityID: c.CapabilityID,
 		ReadOnly:     *c.ResolvedReadOnly,
 		Refreshed:    true,
+		RunState:     string(provider.ToolRunPending),
 		FileDiff: event.FileDiff{
 			Diff: c.Diff, Added: c.Added, Removed: c.Removed,
 		},

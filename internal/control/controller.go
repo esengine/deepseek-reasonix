@@ -1104,6 +1104,16 @@ func (c *Controller) finishGuardedTurn(err error, completion *guardedTurnComplet
 	}
 	done = c.applyTurnDoneProtocol(done, cancelRequested)
 	done.Diagnostic = provider.DiagnoseFailure(err)
+	if pending := c.executor.PendingInterruptedRecovery(); pending != nil && pending.Pending {
+		done.Recovery = &event.RecoveryStatus{
+			Phase:        "turn_recovery_required",
+			Reason:       pending.Cause,
+			TurnID:       pending.TurnID,
+			AttemptID:    pending.AttemptID,
+			RequiresUser: pending.RequiresUserDecision || len(pending.UnknownTools) > 0,
+			Silent:       pending.SilentInterruption,
+		}
+	}
 	if !cancelRequested {
 		done.ProtocolRecovery = c.executor.PendingProtocolRecovery()
 	}
@@ -4331,7 +4341,7 @@ func (c *Controller) recoverInterruptedTurn(path string) {
 	changed := found && len(msgs) > start
 	if changed {
 		if marker.PreserveUser {
-			c.stripCancelledVisibleTurnMessagesAfterWithFallbackAt(start, provider.Message{}, marker.StartedAt)
+			c.stripCancelledVisibleTurnMessagesAfterWithFallbackAt(start, provider.Message{}, marker.StartedAt, c.ledgerTailEvidence())
 		} else {
 			c.stripTurnMessagesAfter(start)
 		}
@@ -4426,10 +4436,10 @@ func (c *Controller) stripInterruptedSyntheticTurnMessagesAfter(idx int) {
 // orchestrator owns that input, so it supplies the exact message rather than
 // letting cancellation infer the current turn from older transcript history.
 func (c *Controller) stripCancelledVisibleTurnMessagesAfterWithFallback(idx int, fallback provider.Message) {
-	c.stripCancelledVisibleTurnMessagesAfterWithFallbackAt(idx, fallback, c.inFlightTurnStartedAt())
+	c.stripCancelledVisibleTurnMessagesAfterWithFallbackAt(idx, fallback, c.inFlightTurnStartedAt(), nil)
 }
 
-func (c *Controller) stripCancelledVisibleTurnMessagesAfterWithFallbackAt(idx int, fallback provider.Message, startedAt time.Time) {
+func (c *Controller) stripCancelledVisibleTurnMessagesAfterWithFallbackAt(idx int, fallback provider.Message, startedAt time.Time, evidence *interruptedTailEvidence) {
 	if c.executor == nil {
 		return
 	}
@@ -4483,10 +4493,7 @@ func (c *Controller) stripCancelledVisibleTurnMessagesAfterWithFallbackAt(idx in
 			recovery.DroppedPartialText = recovery.DroppedPartialText || strings.TrimSpace(m.Content) != ""
 			recovery.DroppedPartialReasoning = recovery.DroppedPartialReasoning || strings.TrimSpace(m.ReasoningContent) != ""
 			if previousRecovery != nil {
-				recovery.CompletedTools = append(recovery.CompletedTools, previousRecovery.CompletedTools...)
-				recovery.InterruptedTools = append(recovery.InterruptedTools, previousRecovery.InterruptedTools...)
-				recovery.NotStartedTools = append(recovery.NotStartedTools, previousRecovery.NotStartedTools...)
-				recovery.UnknownTools = append(recovery.UnknownTools, previousRecovery.UnknownTools...)
+				mergeInterruptedRecovery(recovery, previousRecovery)
 			} else {
 				for _, call := range m.ToolCalls {
 					provider.RecordToolRecovery(recovery, interruptedToolSummary(call), provider.ToolRunUnknown)
@@ -4505,31 +4512,14 @@ func (c *Controller) stripCancelledVisibleTurnMessagesAfterWithFallbackAt(idx in
 			continue
 		}
 		if m.Role == provider.RoleAssistant {
-			recordInterruptedAssistantRecovery(recovery, msgs, i)
+			recordInterruptedAssistantRecovery(recovery, msgs, i, evidence)
 		}
 		if end, ok := completeToolTurnEnd(msgs, i); ok && c.executor.CanReplayAssistantMessage(m) {
 			next = append(next, msgs[i:end]...)
 			i = end
 			continue
 		}
-		switch m.Role {
-		case provider.RoleAssistant:
-			local := m
-			local.Role = provider.RoleTool
-			local.LocalOnly = true
-			local.ToolCallID = provider.LocalOnlyToolID
-			local.Name = provider.LocalOnlyToolName
-			local.InterruptedTurn = nil
-			next = append(next, local)
-			localIndexes = append(localIndexes, len(next)-1)
-			recovery.DroppedPartialText = recovery.DroppedPartialText || strings.TrimSpace(local.Content) != ""
-			recovery.DroppedPartialReasoning = recovery.DroppedPartialReasoning || strings.TrimSpace(local.ReasoningContent) != ""
-		case provider.RoleTool:
-			local := m
-			local.LocalOnly = true
-			local.ToolCalls = []provider.ToolCall{{ID: m.ToolCallID, Name: m.Name}}
-			local.ToolCallID = provider.LocalOnlyToolID
-			local.Name = provider.LocalOnlyToolName
+		if local, ok := localizeInterruptedMessage(m, recovery); ok {
 			next = append(next, local)
 			localIndexes = append(localIndexes, len(next)-1)
 		}
@@ -4542,6 +4532,8 @@ func (c *Controller) stripCancelledVisibleTurnMessagesAfterWithFallbackAt(idx in
 		})
 		localIndexes = append(localIndexes, len(next)-1)
 	}
+	applyInterruptedTailEvidence(recovery, evidence)
+	c.stampInterruptedTurnID(recovery)
 	next[localIndexes[len(localIndexes)-1]].InterruptedTurn = recovery
 	c.replaceSessionAfterCancel(next)
 }

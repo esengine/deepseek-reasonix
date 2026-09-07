@@ -18,4 +18,8 @@ type RecoveryStatus struct {
 	NextAttemptAt int64  `json:"next_attempt_at,omitempty"`
 	WaitedMs      int64  `json:"waited_ms,omitempty"`
 	Waiting       bool   `json:"waiting,omitempty"`
+	TurnID        string `json:"turnId,omitempty"`
+	AttemptID     string `json:"attemptId,omitempty"`
+	RequiresUser  bool   `json:"requiresUserDecision,omitempty"`
+	Silent        bool   `json:"silentInterruption,omitempty"`
 }

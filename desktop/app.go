@@ -5169,6 +5169,7 @@ type HistoryMessage struct {
 	DecisionReceipt  *provider.DecisionReceipt        `json:"decisionReceipt,omitempty"`
 	Readiness        *event.FinalReadiness            `json:"readiness,omitempty"`
 	ProtocolRecovery *provider.ProtocolRecoveryAction `json:"protocolRecovery,omitempty"`
+	Recovery         *HistoryRecovery                 `json:"recovery,omitempty"`
 	ServerSearch     []provider.ServerSearchCall      `json:"serverSearch,omitempty"`
 }
 
@@ -5652,7 +5653,8 @@ func (state *historyMessageConvertState) convertHistoryMessage(
 	if m.LocalOnly && m.InterruptedTurn != nil {
 		out = append(out, HistoryMessage{
 			Role: "notice", Level: "info", Code: event.NoticeCodeCancelledTurn,
-			Content: "This turn was interrupted. Partial output is kept for reference; only completed tool pairs and a bounded recovery summary enter the next model turn. Inspect the workspace before continuing or reverting changes.",
+			Content:  "This turn was interrupted. Partial output is kept for reference; only completed tool pairs and a bounded recovery summary enter the next model turn. Inspect the workspace before continuing or reverting changes.",
+			Recovery: historyRecoveryCard(m.InterruptedTurn),
 		})
 	}
 	if m.Role == provider.RoleUser {

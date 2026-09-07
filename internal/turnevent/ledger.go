@@ -237,6 +237,7 @@ func Open(sessionPath, sessionID string) (*Ledger, error) {
 
 	pendingTools := make(map[string]eventwire.Tool)
 	pendingToolOrder := make([]string, 0)
+	startedTools := make(map[string]bool)
 	for _, rec := range l.records {
 		if rec.Sequence >= l.nextSeq {
 			l.nextSeq = rec.Sequence + 1
@@ -244,6 +245,7 @@ func Open(sessionPath, sessionID string) (*Ledger, error) {
 		if rec.TurnID != "" {
 			if rec.TurnID != l.active {
 				clear(pendingTools)
+				clear(startedTools)
 				pendingToolOrder = pendingToolOrder[:0]
 				l.turnStartSeq = rec.Sequence
 				l.turnStarted = rec.CreatedAt
@@ -264,6 +266,8 @@ func Open(sessionPath, sessionID string) (*Ledger, error) {
 					pendingToolOrder = append(pendingToolOrder, rec.Event.Tool.ID)
 				}
 				pendingTools[rec.Event.Tool.ID] = *rec.Event.Tool
+			case "tool_started":
+				startedTools[rec.Event.Tool.ID] = true
 			case "tool_result":
 				delete(pendingTools, rec.Event.Tool.ID)
 			}
@@ -294,25 +298,8 @@ func Open(sessionPath, sessionID string) (*Ledger, error) {
 			return nil, fmt.Errorf("bootstrap legacy session %s: terminal append rejected", sessionID)
 		}
 	}
-	if l.active != "" && !l.terminal {
-		for _, id := range pendingToolOrder {
-			tool, ok := pendingTools[id]
-			if !ok {
-				continue
-			}
-			result := event.Event{Kind: event.ToolResult, TurnID: l.active, Tool: event.Tool{
-				ID: tool.ID, Name: tool.Name, ResolvedName: tool.ResolvedName,
-				CapabilityID: tool.CapabilityID, ReadOnly: tool.ReadOnly, ParentID: tool.ParentID,
-				Err: "interrupted: runtime restarted before the tool completed",
-			}}
-			if _, ok, appendErr := l.appendLocked(result, l.status); appendErr != nil || !ok {
-				return nil, fmt.Errorf("recover orphaned tool %s in turn %s: %w", id, l.active, appendErr)
-			}
-		}
-		e := event.Event{Kind: event.TurnDone, TurnID: l.active, Status: event.TurnInterrupted, Err: errors.New("runtime restarted before the turn reached a terminal event")}
-		if _, ok, appendErr := l.appendLocked(e, event.TurnInterrupted); appendErr != nil || !ok {
-			return nil, fmt.Errorf("recover orphaned turn %s: %w", l.active, appendErr)
-		}
+	if err := l.closeOrphanedTurnLocked(pendingToolOrder, pendingTools, startedTools); err != nil {
+		return nil, err
 	}
 	return l, nil
 }

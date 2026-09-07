@@ -38,7 +38,7 @@ func TestToolResultDurabilityFailureStopsNextWriter(t *testing.T) {
 		t.Fatalf("err=%v calls=%d,%d", batch.err, first, second)
 	}
 	msgs := session.Snapshot()
-	if msgs[2].ToolRunState != provider.ToolRunCompleted || msgs[3].ToolRunState != provider.ToolRunNotStarted {
+	if msgs[2].ToolRunState != provider.ToolRunCompleted || msgs[3].ToolRunState != provider.ToolRunCancelled {
 		t.Fatalf("states=%+v", msgs)
 	}
 }

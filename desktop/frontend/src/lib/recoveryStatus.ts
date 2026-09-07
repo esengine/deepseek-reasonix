@@ -6,6 +6,10 @@ export interface RecoveryStatus {
   next_attempt_at?: number;
   waited_ms?: number;
   waiting?: boolean;
+  turn_id?: string;
+  attempt_id?: string;
+  requires_user?: boolean;
+  silent?: boolean;
 }
 
 export interface RecoveryEventFields {

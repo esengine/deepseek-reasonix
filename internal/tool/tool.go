@@ -34,6 +34,28 @@ type Tool interface {
 	ReadOnly() bool
 }
 
+// ExecutionPolicy optionally describes retry semantics without changing the
+// provider-visible tool contract. Tools that do not implement it are treated
+// conservatively: writes and shell commands are not idempotent.
+type ExecutionPolicy interface {
+	Idempotent(args json.RawMessage) bool
+	SupportsPostcondition(args json.RawMessage) bool
+}
+
+type PostconditionState string
+
+const (
+	PostconditionUnknown   PostconditionState = "unknown"
+	PostconditionSatisfied PostconditionState = "satisfied"
+	PostconditionAbsent    PostconditionState = "absent"
+)
+
+// PostconditionChecker verifies an effect after a tool result was lost. It
+// must be read-only and must never infer success from an unavailable signal.
+type PostconditionChecker interface {
+	CheckPostcondition(ctx context.Context, args json.RawMessage) (PostconditionState, string, error)
+}
+
 // CallClass is a pure, argument-aware dispatch classification. Generation is a
 // target schema/lifecycle fingerprint checked again by the execution adapter;
 // an empty generation keeps the call on the serial path.

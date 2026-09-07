@@ -11,9 +11,10 @@ import (
 // State an external caller arms before a Run lives in pendingTurn; state that
 // outlives the Run lives in taskRuntime or sessionRuntime.
 type turnRuntime struct {
-	writeRecovery  map[string]provider.ToolCall // unresolved prior effects; reverified before reuse
-	runMaxSteps    int
-	runMaxStepsKey string
+	writeRecovery   map[string]provider.ToolCall // unresolved prior effects; reverified before reuse
+	unknownRecovery map[string]provider.ToolCall // all unresolved calls, including non-file side effects
+	runMaxSteps     int
+	runMaxStepsKey  string
 
 	terminal           terminalProtocolState
 	usedAnyTool        bool

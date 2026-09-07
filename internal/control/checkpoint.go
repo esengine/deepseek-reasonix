@@ -2,6 +2,8 @@ package control
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -10,6 +12,7 @@ import (
 	"reasonix/internal/agent"
 	"reasonix/internal/checkpoint"
 	"reasonix/internal/diff"
+	"reasonix/internal/event"
 	"reasonix/internal/provider"
 )
 
@@ -256,4 +259,25 @@ func (m *checkpointManager) storeRef() *checkpoint.Store {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.store
+}
+
+// stampCheckpointIdentity binds the open checkpoint to the turn's first
+// side-effecting call once its start barrier is durable, so a later restore
+// names the attempt it protects instead of only the user turn.
+func (c *Controller) stampCheckpointIdentity(e event.Event, turnID string) {
+	store := c.checkpoints.storeRef()
+	if store == nil || e.Tool.ID == "" {
+		return
+	}
+	sum := sha256.Sum256([]byte(e.Tool.Args))
+	store.StampRecoveryIdentity(turnID, e.Tool.ID, hex.EncodeToString(sum[:]), func() string {
+		if c.executor == nil || c.executor.Session() == nil {
+			return ""
+		}
+		digest, err := c.executor.Session().ContentDigest()
+		if err != nil {
+			return ""
+		}
+		return digest
+	})
 }

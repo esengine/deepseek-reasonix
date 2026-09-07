@@ -37,6 +37,9 @@ func (a *Agent) parseToolCall(ctx context.Context, turn *turnRuntime, plan *tool
 	if out, handled := recoverPreviousWrite(ctx, turn, recoveryCall, t); handled {
 		return out, true
 	}
+	if out, handled := recoverPreviousUnknown(turn, recoveryCall, t); handled {
+		return out, true
+	}
 
 	if out, blocked := a.repeatedSuccessBlock(plan.call, t); blocked {
 		return toolOutcome{

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -24,6 +25,7 @@ func (a *Agent) emitBatchToolResult(c provider.ToolCall, o toolOutcome, duration
 		Output:       o.output,
 		Err:          o.errMsg,
 		ReadOnly:     readOnly,
+		RunState:     toolOutcomeRunState(o),
 		Truncated:    o.truncated,
 		DurationMs:   duration,
 		Execution:    toEventShellExecution(o.execution, duration),
@@ -60,6 +62,50 @@ func (a *Agent) emitBatchToolResult(c provider.ToolCall, o toolOutcome, duration
 	return nil
 }
 
+func toolOutcomeRunState(o toolOutcome) string {
+	return string(toolOutcomeState(o))
+}
+
+// toolOutcomeState is the single classifier behind the durable event and the
+// stored tool message, so the two can never disagree. Only a pre-start
+// cancellation or a refusal proves a call never ran; interruption evidence in
+// the result text wins over the executed flag because a call that crossed the
+// start barrier may already have side effects.
+func toolOutcomeState(o toolOutcome) provider.ToolRunState {
+	if o.cancelledBeforeExecution {
+		return provider.ToolRunCancelled
+	}
+	if o.blocked && !o.executed {
+		return provider.ToolRunNotStarted
+	}
+	if provider.ToolResultRunState(provider.Message{Content: o.output + "\n" + o.errMsg}) == provider.ToolRunUnknown {
+		return provider.ToolRunUnknown
+	}
+	if !o.executed {
+		return provider.ToolRunNotStarted
+	}
+	if o.errMsg != "" {
+		return provider.ToolRunFailed
+	}
+	return provider.ToolRunCompleted
+}
+
+// interruptedOutcome shapes a call the batch could not finish. A call that
+// never crossed the start barrier is provably not run; one that did may
+// already have side effects, so its outcome must read as unknown.
+func interruptedOutcome(started bool, ctxErr error) toolOutcome {
+	errMsg := context.Canceled.Error()
+	if ctxErr != nil {
+		errMsg = ctxErr.Error()
+	}
+	if started {
+		const output = "cancelled: context cancelled during execution; outcome unknown"
+		return toolOutcome{output: output, errMsg: errMsg}
+	}
+	const output = "cancelled: context cancelled before execution"
+	return toolOutcome{output: output, errMsg: errMsg, cancelledBeforeExecution: true}
+}
+
 func isSubagentToolName(name string) bool {
 	switch name {
 	case "task", "read_only_task", "run_skill", "read_only_skill", "explore", "research", "review", "security_review", "security-review", "parallel_tasks", "fleet":
@@ -86,13 +132,7 @@ func (a *Agent) recordToolExecutionAudit(readOnly, parallel bool, startedAt, dur
 }
 
 func (a *Agent) storeBatchToolResult(call provider.ToolCall, o toolOutcome) {
-	state := provider.ToolRunCompleted
-	if !o.executed {
-		state = provider.ToolRunNotStarted
-	} else if provider.ToolResultRunState(provider.Message{Content: o.output + "\n" + o.errMsg}) == provider.ToolRunUnknown {
-		state = provider.ToolRunUnknown
-	}
-	msg := provider.Message{Role: provider.RoleTool, Content: o.output, Images: o.images, ToolCallID: call.ID, Name: call.Name, ToolRunState: state, ToolExecution: toProviderToolExecution(o.execution)}
+	msg := provider.Message{Role: provider.RoleTool, Content: o.output, Images: o.images, ToolCallID: call.ID, Name: call.Name, ToolRunState: toolOutcomeState(o), ToolExecution: toProviderToolExecution(o.execution)}
 	if o.rawOutput != "" && o.rawOutput != o.output {
 		msg.RawContent = o.rawOutput
 	}

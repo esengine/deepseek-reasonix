@@ -73,7 +73,7 @@ func withReplayRecoveryFacts(original, repaired []provider.Message) []provider.M
 			provider.RecordToolRecovery(recovery, provider.InterruptedToolSummary{ID: call.ID, Name: call.Name}, state)
 		}
 	}
-	if len(recovery.CompletedTools)+len(recovery.InterruptedTools) == 0 {
+	if len(recovery.CompletedTools)+len(recovery.FailedTools)+len(recovery.InterruptedTools) == 0 {
 		return repaired
 	}
 	// User ordinals survive tool-turn projection, even when later user text repeats.

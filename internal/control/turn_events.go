@@ -203,6 +203,9 @@ func (s *turnEventSink) persistAndPublish(e event.Event) error {
 	if !ok {
 		return nil
 	}
+	if e.Kind == event.ToolStarted && !e.Tool.ReadOnly {
+		s.c.stampCheckpointIdentity(e, stamped.TurnID)
+	}
 	s.publishInner(stamped)
 	if e.Kind == event.TurnDone && !ledger.ProjectionAckRequired() {
 		if err := ledger.AcknowledgeProjection(stamped.TurnID); err != nil {
@@ -286,6 +289,15 @@ func (s *turnEventDurableSink) RecordSubagentLifecycle(a event.SubagentLifecycle
 }
 
 func terminalTurnStatus(e event.Event) event.TurnStatus {
+	var uncertain *agent.CompletionUncertainError
+	if errors.As(e.Err, &uncertain) {
+		return event.TurnRecoveryRequired
+	}
+	// An unproven side effect or a turn that died before producing anything
+	// is not merely interrupted: the next write-capable turn needs a decision.
+	if r := e.Recovery; r != nil && (r.RequiresUser || r.Silent) {
+		return event.TurnRecoveryRequired
+	}
 	if e.Cancelled || errors.Is(e.Err, context.Canceled) {
 		return event.TurnInterrupted
 	}

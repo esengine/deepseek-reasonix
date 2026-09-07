@@ -539,3 +539,17 @@ func TestPromptWireMarksLegacyIdentity(t *testing.T) {
 		t.Fatalf("legacy prompt wire identity = %+v", w)
 	}
 }
+
+func TestToWireTurnDoneCarriesRecovery(t *testing.T) {
+	w := ToWire(event.Event{Kind: event.TurnDone, Status: event.TurnRecoveryRequired,
+		Recovery: &event.RecoveryStatus{Phase: "turn_recovery_required", RequiresUser: true, Silent: true}})
+	b, err := json.Marshal(w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"phase":"turn_recovery_required"`, `"requiresUserDecision":true`, `"silentInterruption":true`} {
+		if !strings.Contains(string(b), want) {
+			t.Fatalf("turn_done wire = %s, want %s", b, want)
+		}
+	}
+}

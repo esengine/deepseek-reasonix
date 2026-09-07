@@ -22,7 +22,7 @@ export type EventKind =
   | "turn_status"
   | "prompt_answered" | "session_changed"
   | "mcp_interaction"
-  | "tool_progress"
+  | "tool_progress" | "tool_started"
   | "usage"
   | "notice"
   | "phase"
@@ -44,7 +44,7 @@ export type EventKind =
   | "completion_summary"
   | "provider_unreachable";
 export type StreamAttemptAction = "begin" | "discard" | "commit";
-export type TurnStatus = "queued" | "in_progress" | "waiting_user" | "cancelling" | "completed" | "interrupted" | "failed" | "protocol_failed";
+export type TurnStatus = "queued" | "in_progress" | "waiting_user" | "cancelling" | "completed" | "interrupted" | "failed" | "protocol_failed" | "recovery_required" | "unknown";
 export interface TurnEventEnvelope {
   turnId: string;
   seq: number;
