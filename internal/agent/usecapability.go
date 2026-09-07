@@ -879,6 +879,12 @@ func (t *UseCapabilityTool) resolveSkillCall(skillName, id string, args json.Raw
 	for _, toolName := range []string{"run_skill", "read_only_skill", "read_skill"} {
 		if tl, ok := t.registry.Get(toolName); ok {
 			payload := args
+			// The proxy schema types arguments as an object, but models
+			// sometimes emit a JSON-encoded string of that object; unwrap one
+			// level so name injection below still lands on the object form.
+			if s, ok := jsonStringOfObject(payload); ok {
+				payload = s
+			}
 			if len(payload) == 0 || string(payload) == "null" {
 				payload = json.RawMessage(fmt.Sprintf(`{"name":%q}`, skillName))
 			} else {

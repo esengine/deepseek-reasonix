@@ -141,7 +141,7 @@ func (t *runSkillTool) Execute(ctx context.Context, args json.RawMessage) (strin
 		Continue  string `json:"continue_from"`
 		Fork      string `json:"fork_from"`
 	}
-	if err := json.Unmarshal(args, &p); err != nil {
+	if err := json.Unmarshal(unwrapJSONStringArgs(args), &p); err != nil {
 		return "", fmt.Errorf("invalid args: %w", err)
 	}
 	name := cleanSkillName(p.Name)
@@ -295,7 +295,7 @@ func (t *readOnlySkillTool) Execute(ctx context.Context, args json.RawMessage) (
 		Name      string `json:"name"`
 		Arguments string `json:"arguments"`
 	}
-	if err := json.Unmarshal(args, &p); err != nil {
+	if err := json.Unmarshal(unwrapJSONStringArgs(args), &p); err != nil {
 		return "", fmt.Errorf("invalid args: %w", err)
 	}
 	name := cleanSkillName(p.Name)
