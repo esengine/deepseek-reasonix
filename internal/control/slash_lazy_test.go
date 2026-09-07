@@ -22,7 +22,7 @@ func TestSlashArgItemsLazyResolvesOnlyDynamicStructuredCommands(t *testing.T) {
 	}
 
 	items, _, applies := SlashArgItemsLazy("/language e", resolve)
-	if !applies || len(items) != 1 || items[0].Label != "en" {
+	if !applies || len(items) != 2 || items[0].Label != "en" || items[1].Label != "es" {
 		t.Fatalf("static structured completion = %+v, applies=%v", items, applies)
 	}
 	if calls != 0 {

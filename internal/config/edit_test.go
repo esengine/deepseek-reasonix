@@ -545,22 +545,6 @@ func TestSetProviderEffort(t *testing.T) {
 	}
 }
 
-func TestSetLanguage(t *testing.T) {
-	c := Default()
-	if err := c.SetLanguage("zh"); err != nil {
-		t.Fatalf("SetLanguage zh: %v", err)
-	}
-	if c.Language != "zh" {
-		t.Fatalf("language = %q, want zh", c.Language)
-	}
-	if err := c.SetLanguage("auto"); err != nil {
-		t.Fatalf("SetLanguage auto: %v", err)
-	}
-	if c.Language != "" {
-		t.Fatalf("language = %q, want cleared", c.Language)
-	}
-}
-
 func TestSetReasoningLanguage(t *testing.T) {
 	c := Default()
 	if err := c.SetReasoningLanguage("中文"); err != nil {

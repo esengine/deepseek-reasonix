@@ -367,6 +367,7 @@ var Chinese = Messages{
 	ArgLanguageAuto:     "从 REASONIX_LANG / 系统 locale 自动检测",
 	ArgLanguageEn:       "English",
 	ArgLanguageZh:       "中文",
+	ArgLanguageEs:       "西班牙语",
 
 	ListModelsHeaderFmt: "模型（当前：%s）",
 	ListModelsHint:      "用底部的模型切换器，或输入 /model <provider/model>",

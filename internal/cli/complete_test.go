@@ -594,7 +594,7 @@ func TestSlashArgCompletionLanguage(t *testing.T) {
 	if !m.completion.active || m.completion.kind != compSlashArg {
 		t.Fatalf("/language should open arg completion: %+v", m.completion)
 	}
-	for _, want := range []string{"auto", "en", "zh"} {
+	for _, want := range []string{"auto", "en", "zh", "es"} {
 		if !hasLabel(m.completion.items, want) {
 			t.Fatalf("/language completion missing %q: %v", want, labels(m.completion.items))
 		}
