@@ -11,8 +11,11 @@
 //      `$…$` and macros already inside math just substitute.
 //   5. Inline `$$` glued to prose gets a blank line inserted before it
 //      (CommonMark requires that block math be paragraph-separated).
-//   6. Protect pipes inside inline math before GFM table tokenisation.
-//   7. Restore placeholders for remark-math. KaTeX-specific normalisation is
+//   6. Escape currency dollars (`$5` followed by prose) so greedy single-$
+//      pairing cannot swallow a later math span or pair across amounts
+//      (assistant-ui escapeCurrencyDollars parity).
+//   7. Protect pipes inside inline math before GFM table tokenisation.
+//   8. Restore placeholders for remark-math. KaTeX-specific normalisation is
 //      handled by the AST policy after parsing.
 
 import { expandYoungDiagrams } from "./youngDiagrams";
@@ -84,6 +87,16 @@ function normalizeMathText(s: string): string {
     return math.includes("$") ? `${IM}${protectInlineMathSource(math)}${IM}` : match;
   });
 
+  // Step 5.5: escape currency dollars so a stray amount cannot pair with a
+  // later math span's opening delimiter. remark-math pairs any two `$` on a
+  // line, so `budget is $100 and the answer is $42$` would otherwise merge
+  // `$100 and the answer is $` into one junk span and destroy the math. A
+  // single `$` immediately followed by a digit is prose currency unless the
+  // span up to the next `$` reads as a math body (assistant-ui
+  // `escapeCurrencyDollars` parity). Display `$$` runs and escaped dollars
+  // (already hidden above) are never touched.
+  r = escapeCurrencyDollars(r, escapedDollarToken);
+
   // Step 6: GFM identifies table cells before remark plugins can transform the
   // AST. Normalise only inline spans containing pipes at this syntax boundary
   // so formulas such as `$|x|$` cannot be split into separate cells. A pipe is
@@ -111,6 +124,100 @@ function protectInlineMathPipesForGfm(s: string): string {
     }
     return hasUnescapedPipe ? `$${protectInlineMathSource(math)}$` : match;
   });
+}
+
+// ── currency-dollar escaping (assistant-ui escapeCurrencyDollars parity) ─────
+
+const MATH_BODY_BLANK_LINE = /\n\s*\n/;
+const MATH_BODY_LATEX = /\\[A-Za-z]+|[\^_{}]/;
+const MATH_BODY_ADJACENT_WORDS = /[A-Za-z0-9]\s+[A-Za-z0-9]/;
+const MATH_BODY_DANGLING_OPERATOR = /[+\-*/=<>~^_]$/;
+
+/**
+ * Whether the text between two single `$` reads as an inline math expression
+ * rather than the prose separating two currency amounts. A body that ends
+ * the way prose between amounts does (mid-sentence space, dangling operator)
+ * is rejected even when it carries LaTeX-looking syntax, since such prose may
+ * itself contain `_` or `\word`; otherwise LaTeX syntax accepts the span and
+ * two adjacent words reject it.
+ */
+function isCurrencySafeMathBody(body: string): boolean {
+  if (body.length === 0) return false;
+  if (MATH_BODY_BLANK_LINE.test(body)) return false;
+  if (/\s$/.test(body) && !/^\s/.test(body)) return false;
+  if (MATH_BODY_DANGLING_OPERATOR.test(body)) return false;
+  if (MATH_BODY_LATEX.test(body)) return true;
+  return !MATH_BODY_ADJACENT_WORDS.test(body);
+}
+
+function isDigitChar(char: string | undefined): boolean {
+  return char !== undefined && char >= "0" && char <= "9";
+}
+
+function dollarRunLength(s: string, index: number): number {
+  let length = 0;
+  while (s[index + length] === "$") length += 1;
+  return length;
+}
+
+function nextSingleDollar(s: string, from: number): number {
+  let index = from;
+  while (index < s.length) {
+    if (s[index] === "$") {
+      // A `$$` run is a display delimiter, not an inline closer.
+      return dollarRunLength(s, index) >= 2 ? -1 : index;
+    }
+    index += 1;
+  }
+  return -1;
+}
+
+/**
+ * Escapes a `$` that opens a currency amount (`$5`, `$19.99`, `$1,299`) so
+ * remark-math's greedy single-dollar pairing cannot consume it — either as a
+ * junk span with a later math delimiter or as one half of a cross-amount
+ * pair. A `$` followed by a digit is currency unless the span up to the next
+ * `$` is a plausible math body, so `$42$` and `$5x = 10$` survive while
+ * `$5 and $7` and `budget is $100 … $42$` stay literal/functional.
+ * Escaping via `escapedDollarToken` keeps the emitted text free of `$` so
+ * later `$`-scanning steps (pipe protection, remark-math) cannot re-pair it.
+ */
+function escapeCurrencyDollars(s: string, escapedDollar: string): string {
+  let out = "";
+  let index = 0;
+  while (index < s.length) {
+    const char = s[index];
+    // Escaped characters (LaTeX commands, \\) pass through untouched.
+    if (char === "\\") {
+      out += s.slice(index, index + 2);
+      index += 2;
+      continue;
+    }
+    if (char !== "$") {
+      out += char;
+      index += 1;
+      continue;
+    }
+    const run = dollarRunLength(s, index);
+    if (run >= 2) {
+      out += s.slice(index, index + run);
+      index += run;
+      continue;
+    }
+    const close = nextSingleDollar(s, index + 1);
+    const body = close === -1 ? null : s.slice(index + 1, close);
+    const opensMath = body !== null
+      && !isDigitChar(s[close + 1])
+      && isCurrencySafeMathBody(body);
+    if (opensMath) {
+      out += s.slice(index, close + 1);
+      index = close + 1;
+      continue;
+    }
+    out += isDigitChar(s[index + 1]) ? escapedDollar : "$";
+    index += 1;
+  }
+  return out;
 }
 
 function protectInlineMathSource(source: string): string {

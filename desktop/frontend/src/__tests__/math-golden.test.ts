@@ -146,27 +146,15 @@ check("$p = +\\alpha$", () => isLikelyInlineMath("p = +\\alpha") === true);
 check("$+$", () => isLikelyInlineMath("+") === true);
 check("$=$", () => isLikelyInlineMath("=") === true);
 
-console.log("\nisLikelyInlineMath — numeric syntax and contextual currency");
-check("$5 defaults to literal without math context", () => isLikelyInlineMath("5") === false);
-check("$10 defaults to literal without math context", () => isLikelyInlineMath("10") === false);
-check("$10.50 defaults to literal without math context", () => isLikelyInlineMath("10.50") === false);
+console.log("\nisLikelyInlineMath — numeric syntax");
+check("$5 is math by default (glued $ delimiters)", () => isLikelyInlineMath("5") === true);
+check("$10 is math by default", () => isLikelyInlineMath("10") === true);
+check("$10.50 is math by default", () => isLikelyInlineMath("10.50") === true);
 check("$100% defaults to math", () => isLikelyInlineMath("100%") === true);
-check("costs $5$ is contextual currency", () =>
-  classifyInlineMath("5", { before: "it costs ", after: " today" }) === "currency");
-check("price is $10.50$ each is contextual currency", () =>
-  classifyInlineMath("10.50", { before: "price is ", after: " each" }) === "currency");
-check("10–$20$ MeV remains math", () =>
-  classifyInlineMath("20", { before: "10–", after: " MeV" }) === "math");
-check("$20$ MeV uses a scientific unit as positive math context", () =>
-  classifyInlineMath("20", { after: " MeV" }) === "math");
-check("$5$ cm uses an SI-prefixed unit as positive math context", () =>
-  classifyInlineMath("5", { after: " cm" }) === "math");
-check("$2$ L uses a scientific unit symbol as positive math context", () =>
-  classifyInlineMath("2", { after: " L" }) === "math");
-check("$3$ dB uses a common scientific unit as positive math context", () =>
-  classifyInlineMath("3", { after: " dB" }) === "math");
-check("x = $2$ uses an operator as positive math context", () =>
-  classifyInlineMath("2", { before: "x = " }) === "math");
+check("assistant-ui parity: price-word context no longer demotes pure numbers", () =>
+  classifyInlineMath("5") === "math" && classifyInlineMath("10.50") === "math");
+check("range/unit/operator context is irrelevant now: pure numbers are always math", () =>
+  classifyInlineMath("20") === "math" && classifyInlineMath("1") === "math");
 check("URL", () => isLikelyInlineMath("https://example.com") === false);
 check("prose text", () => isLikelyInlineMath("hello world today") === false);
 check("prose $x y z$ (spaces)", () => isLikelyInlineMath("x y z") === false);
@@ -193,11 +181,11 @@ check("$[\\mathbf{56}]$ → math", () => isLikelyInlineMath("[\\mathbf{56}]") ==
 
 console.log("\nisLikelyInlineMath — minimal LaTeX patterns (regression)");
 // LLMs frequently emit minimal LaTeX in math contexts that the older
-// classifier rejected as currency / word tokens. These tests pin down the
-// deliberately-permissive rules for common math patterns while keeping
-// context-free pure numbers literal until the AST policy sees a math signal.
-check("single-digit $1$, $2$, $5$ → literal without context", () => isLikelyInlineMath("1") === false);
-check("multi-digit $42$ → literal without context", () => isLikelyInlineMath("42") === false);
+// classifier rejected as word tokens. These tests pin down the
+// deliberately-permissive rules for common math patterns; pure numbers are
+// math by default (assistant-ui parity).
+check("single-digit $1$, $2$, $5$ → math by default", () => isLikelyInlineMath("1") === true);
+check("multi-digit $42$ → math by default", () => isLikelyInlineMath("42") === true);
 check("$2.5x$ is math (number with variable)", () => isLikelyInlineMath("2.5x") === true);
 check("$10\%$ is math (percentage with LaTeX)", () => isLikelyInlineMath("10\\%") === true);
 check("$2.5x dollars$ → NOT math (prefix-only numeric variable)", () => isLikelyInlineMath("2.5x dollars") === false);
@@ -340,7 +328,7 @@ eq(normalizeMath("solve $x^2 + y^2 = z^2$ please"), "solve $x^2 + y^2 = z^2$ ple
 eq(normalizeMath("$\\alpha + \\beta$"), "$\\alpha + \\beta$", "$\\alpha+\\beta$ is math");
 eq(normalizeMath("price is $10.50$ each"), "price is $10.50$ each", "$10.50$ preserved for contextual classification");
 eq(normalizeMath("$I$ think"), "$I$ think", "$I$ is math (uppercase single letter)");
-eq(normalizeMath("it costs $5 and $10 total"), "it costs $5 and $10 total", "multiple prose dollars preserved for parser-aware policy");
+eq(normalizeMath("it costs $5 and $10 total"), "it costs \\$5 and \\$10 total", "cross-amount prose dollars escaped by the currency pre-pass");
 
 console.log("\nnormalizeMath — Markdown code regions stay literal");
 eq(normalizeMath("`$PATH$`"), "`$PATH$`", "inline code with env token");
@@ -480,7 +468,7 @@ for (const [src, label] of e2e) {
 console.log("\nnormalizeMath — non-math inputs pass through");
 type Passthrough = { src: string; expected: string; label: string };
 const passthrough: Passthrough[] = [
-  { src: "costs $100$ today", expected: "costs $100$ today", label: "multi-digit currency preserved for AST policy" },
+  { src: "costs $100$ today", expected: "costs $100$ today", label: "multi-digit pair passes through the pre-pass untouched" },
   { src: "line break \\\\[4pt] here", expected: "line break \\\\[4pt] here", label: "LaTeX line-break spacing" },
   { src: "hello world", expected: "hello world", label: "plain text" },
 ];
@@ -505,65 +493,67 @@ function renderHtml(src: string): string {
   );
 }
 
-check("currency '$5 and $6' renders as literal dollars, not math", () => {
+check("cross-amount pairing '$5 and $6' renders as literal dollars, not math", () => {
   const html = renderHtml("These two apples cost $5 and $6");
   return !html.includes("katex") && html.includes("$5") && html.includes("$6");
 });
-check("paired currency 'costs $1$ today' drops the spurious closing delimiter", () => {
-  const html = renderHtml("costs $1$ today");
-  return !html.includes("katex") && html.includes("$1 today") && !html.includes("$1$");
+// Assistant-ui `escapeCurrencyDollars` parity: a glued $N$ pair is math even
+// when price words or currency units sit next to it. Humans and models that
+// want literal dollars write `\$5` (escaped) or a single `$5`; the cross-
+// amount prose pair above is the real-world currency artifact, and it stays
+// literal via the classifier catch-all rather than this demotion.
+const PARITY_MATH_CASES: ReadonlyArray<readonly [string, string]> = [
+  ["costs $1$ today", "1"],
+  ["price is $10.50$ each", "10.50"],
+  ["价格是$5$", "5"],
+  ["价格：$5$", "5"],
+  ["The price ($5$) includes tax.", "5"],
+  ["The price {$5$} includes tax.", "5"],
+  ["The price ‘$5$’ includes tax.", "5"],
+  ["价格（$5$）含税。", "5"],
+  ["It is $5$ (USD).", "5"],
+  ["It is $5$—cash.", "5"],
+  ["I have $5$ in cash", "5"],
+  ["costs **$5$** today", "5"],
+  ["price is *$10.50$* each", "10.50"],
+];
+for (const [src, num] of PARITY_MATH_CASES) {
+  check(`assistant-ui parity: "${src}" renders as math`, () => {
+    const html = renderHtml(src);
+    return html.includes("katex") && html.includes(`<mn>${num}</mn>`);
+  });
+}
+check("escaped \\$ dollars stay literal and never pair", () => {
+  const html = renderHtml("It costs \\$5 today, not \\$6");
+  return !html.includes("katex") && html.includes("$5") && html.includes("$6");
 });
-check("paired decimal currency uses surrounding price context", () => {
-  const html = renderHtml("price is $10.50$ each");
-  return !html.includes("katex") && html.includes("$10.50 each") && !html.includes("$10.50$");
+// Currency pre-pass (assistant-ui escapeCurrencyDollars parity): a `$`
+// followed by a digit is escaped unless its span to the next `$` reads as a
+// math body, so a stray amount can no longer swallow a later formula.
+check("lone unpaired $5 stays literal", () => {
+  const html = renderHtml("It costs $5 today.");
+  return !html.includes("katex") && html.includes("$5 today.");
 });
-check("Chinese paired currency uses localized price context", () => {
-  const html = renderHtml("价格是$5$");
-  return !html.includes("katex") && html.includes("价格是$5") && !html.includes("$5$");
+check("currency $ escapes so a later math span renders: 'budget is $100 … $42$'", () => {
+  const html = renderHtml("The budget is $100 and the answer is $42$.");
+  return html.includes("katex") && html.includes("<mn>42</mn>")
+    && html.includes("$100") && !html.includes("$42$");
 });
-check("full-width punctuation keeps paired currency literal", () => {
-  const html = renderHtml("价格：$5$");
-  return !html.includes("katex") && html.includes("价格：$5") && !html.includes("$5$");
+check("currency $ escapes so a later symbol formula renders", () => {
+  const html = renderHtml("It costs $5, and $x+y$ is the formula.");
+  return html.includes("katex") && !html.includes("$x+y$");
 });
-check("parentheses do not hide preceding currency context", () => {
-  const html = renderHtml("The price ($5$) includes tax.");
-  return !html.includes("katex") && html.includes("The price ($5) includes tax.");
+check("digit-led math bodies survive currency escaping", () => {
+  const html = renderHtml("digit-led $2x$ and $5x = 10$ both render");
+  return html.includes("katex") && !html.includes("$2x$") && !html.includes("$5x = 10$");
 });
-check("braces do not hide preceding currency context", () => {
-  const html = renderHtml("The price {$5$} includes tax.");
-  return !html.includes("katex") && html.includes("The price {$5} includes tax.");
-});
-check("curly quotes do not hide preceding currency context", () => {
-  const html = renderHtml("The price ‘$5$’ includes tax.");
-  return !html.includes("katex") && html.includes("The price ‘$5’ includes tax.");
-});
-check("full-width parentheses do not hide Chinese currency context", () => {
-  const html = renderHtml("价格（$5$）含税。");
-  return !html.includes("katex") && html.includes("价格（$5）含税。");
-});
-check("parenthesized suffix currency unit repairs paired dollars", () => {
-  const html = renderHtml("It is $5$ (USD).");
-  return !html.includes("katex") && html.includes("It is $5 (USD).");
-});
-check("dash-separated cash suffix repairs paired dollars", () => {
-  const html = renderHtml("It is $5$—cash.");
-  return !html.includes("katex") && html.includes("It is $5—cash.");
-});
-check("cash context keeps paired currency literal", () => {
-  const html = renderHtml("I have $5$ in cash");
-  return !html.includes("katex") && html.includes("$5 in cash") && !html.includes("$5$");
-});
-check("bold markup does not hide preceding currency context", () => {
-  const html = renderHtml("costs **$5$** today");
-  return !html.includes("katex") && html.includes("<strong>$5</strong>");
-});
-check("emphasis does not hide surrounding currency context", () => {
-  const html = renderHtml("price is *$10.50$* each");
-  return !html.includes("katex") && html.includes("<em>$10.50</em>");
-});
-check("ambiguous paired numbers remain literal without positive math context", () => {
+eq(normalizeMath("The budget is $100 and the answer is $42$."),
+  "The budget is \\$100 and the answer is $42$.",
+  "currency pre-pass escapes only the amount dollar");
+check("paired numbers 'from $5$ to $10$' render as math (global default)", () => {
   const html = renderHtml("from $5$ to $10$");
-  return !html.includes("katex") && html.includes("$5$") && html.includes("$10$");
+  return html.includes("katex") && html.includes("<mn>5</mn>") && html.includes("<mn>10</mn>")
+    && !html.includes("$5$") && !html.includes("$10$");
 });
 check("env var $PATH$ renders as literal, not math", () => {
   const html = renderHtml("env $PATH$ here");
@@ -573,9 +563,49 @@ check("range endpoint 10–$20$ MeV renders numeric math", () => {
   const html = renderHtml("10–$20$ MeV");
   return html.includes("katex") && html.includes("<mn>20</mn>");
 });
-check("standalone $42$ remains literal without positive math context", () => {
+check("standalone $42$ renders as math without other context", () => {
   const html = renderHtml("$42$ elements");
-  return !html.includes("katex") && html.includes("$42$ elements");
+  return html.includes("katex") && html.includes("<mn>42</mn>") && !html.includes("$42$");
+});
+// GFM table cells: pure numbers render as math by default (GitHub and
+// assistant-ui parity), in cells and prose alike.
+check("pure number $1$ in a GFM table cell renders as math", () => {
+  const html = renderHtml([
+    "| Quantity | SU(6) prediction | Experiment |",
+    "|---|---|---|",
+    "| $\\Delta\\Sigma$ | $1$ | $1.2754$ |",
+  ].join("\n"));
+  return html.includes("katex") && html.includes("<mn>1</mn>") && html.includes("<mn>1.2754</mn>")
+    && !html.includes("$1$") && !html.includes("$1.2754$");
+});
+check("bold pure number in a GFM table cell still renders as math", () => {
+  const html = renderHtml(["| a | b |", "|---|---|", "| **$5$** | $3$ |"].join("\n"));
+  return html.includes("katex") && html.includes("<mn>5</mn>") && html.includes("<mn>3</mn>")
+    && !html.includes("$5$") && !html.includes("$3$");
+});
+check("currency prose inside a GFM table cell renders as math (parity)", () => {
+  const html = renderHtml(["| note |", "|---|", "| costs $5$ today |"].join("\n"));
+  return html.includes("katex") && html.includes("<mn>5</mn>");
+});
+// Spacing & pairing: remark-math v6 pairs $…$ greedily, even across spaces
+// and words, so these judgements live in the policy, not the tokenizer.
+// Content is trimmed before classification, and cross-word pairs restore
+// verbatim because they match no math pattern.
+check("sloppy spaced delimiters with price words still render as math (parity)", () => {
+  const html = renderHtml("It costs $ 5$ today");
+  return html.includes("katex") && html.includes("<mn>5</mn>");
+});
+check("spaced closing delimiter with cash context stays literal (assistant-ui parity)", () => {
+  const html = renderHtml("I paid $5 $ cash");
+  return !html.includes("katex") && html.includes("$5") && !html.includes("$5$");
+});
+check("cross-word $…$ pairing restores verbatim, never math", () => {
+  const html = renderHtml("from $5 to $10");
+  return !html.includes("katex") && html.includes("from $5 to $10");
+});
+check("bare number with sloppy spaced delimiters renders as math (global default)", () => {
+  const html = renderHtml("the value is $ 5$ here");
+  return html.includes("katex") && html.includes("<mn>5</mn>");
 });
 check("scientific unit makes a paired number mathematical", () => {
   const html = renderHtml("$20$ MeV");

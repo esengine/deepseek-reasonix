@@ -27,44 +27,6 @@ type VFileLike = {
   value: unknown;
 };
 
-function siblingText(parent: ParentWithChildren, index: number, offset: -1 | 1): string {
-  const sibling = parent.children[index + offset];
-  if (sibling?.type !== "text" || typeof sibling.value !== "string") return "";
-  return offset < 0 ? sibling.value.slice(-120) : sibling.value.slice(0, 120);
-}
-
-function stripAdjacentMarkdown(text: string, side: -1 | 1): string {
-  let current = text;
-  while (true) {
-    const next = side < 0
-      ? current.replace(/(?:[*_~]{1,3}|\[)\s*$/, "")
-      : current.replace(/^\s*(?:[*_~]{1,3}|\])/, "");
-    if (next === current) return current;
-    current = next;
-  }
-}
-
-function inlineMathContext(
-  node: InlineMath,
-  file: VFileLike,
-  parent: ParentWithChildren,
-  index: number,
-): { before: string; after: string } {
-  const source = String(file.value ?? "");
-  const start = node.position?.start.offset;
-  const end = node.position?.end.offset;
-  if (typeof start === "number" && typeof end === "number") {
-    return {
-      before: stripAdjacentMarkdown(source.slice(Math.max(0, start - 120), start), -1),
-      after: stripAdjacentMarkdown(source.slice(end, end + 120), 1),
-    };
-  }
-  return {
-    before: siblingText(parent, index, -1),
-    after: siblingText(parent, index, 1),
-  };
-}
-
 function originalSource(node: InlineMath, file: VFileLike): string {
   const source = String(file.value ?? "");
   const start = node.position?.start.offset;
@@ -140,20 +102,14 @@ export function remarkMathPolicy() {
       const typedNode = node as InlineMath;
       const typedParent = parent as ParentWithChildren;
       const { source, rendered } = inlineMathSources(typedNode, file);
-      const classificationSource = source.trim();
-      const decision = classifyInlineMath(
-        classificationSource,
-        inlineMathContext(typedNode, file, typedParent, index),
-      );
+      const decision = classifyInlineMath(source.trim());
 
       if (decision === "math") {
         setMathValue(typedNode, source, latexNormalizeForKatex(rendered));
         return;
       }
 
-      const value = decision === "currency"
-        ? `$${classificationSource}`
-        : originalSource(typedNode, file);
+      const value = originalSource(typedNode, file);
       typedParent.children[index] = { type: "text", value } satisfies Text;
     });
 
