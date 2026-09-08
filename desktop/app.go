@@ -109,6 +109,9 @@ type App struct {
 	ctx          context.Context
 	workspaceHub *workspaceChangeHub
 	topicState   *topicStateManager
+	// periodicSnapshot drives scheduled full-session snapshots as a safety net
+	// for the TurnDone-only autosave. Nil when the feature is disabled by env.
+	periodicSnapshot *periodicSnapshotter
 	// topicTitleMutationMu keeps the authoritative title commit and its Tab /
 	// session-sidecar publication in the same order for manual and automatic
 	// renames. It is never held by generic topic-state reads or other metadata.
@@ -546,6 +549,11 @@ func (a *App) startup(ctx context.Context) {
 	// After restoreOrBuildTabs is launched: the GC's first sweep waits on
 	// tabsRestored so it never observes the pre-restore empty tab map.
 	a.startRecoveryGC()
+	// Periodic full-session snapshot is a safety net for the TurnDone-only
+	// autosave. Opt-in via REASONIX_ENABLE_PERIODIC_SNAPSHOT=1; no-op when
+	// disabled so default behaviour is unchanged.
+	a.periodicSnapshot = newPeriodicSnapshotter(a)
+	a.periodicSnapshot.Start()
 }
 
 func (a *App) beforeClose(ctx context.Context) bool {

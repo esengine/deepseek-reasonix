@@ -22,6 +22,11 @@ func completeDesktopShutdown(tracker *desktopLifecycleTracker, body func()) {
 }
 
 func (a *App) shutdownBody() {
+	// Stop the periodic snapshotter before controller teardown so its final
+	// in-flight snapshot completes while controllers are still alive.
+	if a.periodicSnapshot != nil {
+		a.periodicSnapshot.Stop()
+	}
 	if a.topicState != nil {
 		defer a.topicState.close()
 	}
