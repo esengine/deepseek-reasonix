@@ -1224,6 +1224,46 @@ func TestDesktopStartupSettingsUsesUserDesktopPreferencesWithoutFullSettingsPayl
 	}
 }
 
+// TestSetDisplayModePersistsAcrossRestarts 回归测试：通过 App.SetDisplayMode 设置的
+// 会话展示模式必须在重启后仍然生效（#4831）。
+func TestSetDisplayModePersistsAcrossRestarts(t *testing.T) {
+	isolateDesktopUserDirs(t)
+
+	project := robustTempDir(t)
+	if err := os.WriteFile(filepath.Join(project, "reasonix.toml"), []byte("# project\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	orig, _ := os.Getwd()
+	defer func() { _ = os.Chdir(orig) }()
+	if err := os.Chdir(project); err != nil {
+		t.Fatal(err)
+	}
+
+	app := NewApp()
+
+	// 通过 App API 设置为紧凑模式。
+	if err := app.SetDisplayMode("compact"); err != nil {
+		t.Fatalf("SetDisplayMode: %v", err)
+	}
+
+	// 验证用户配置文件里确实包含 display_mode = "compact"。
+	userPath := config.UserConfigPath()
+	raw, err := os.ReadFile(userPath)
+	if err != nil {
+		t.Fatalf("read user config: %v", err)
+	}
+	if !strings.Contains(string(raw), `display_mode = "compact"`) {
+		t.Fatalf("user config missing display_mode = \"compact\":\n%s", string(raw))
+	}
+
+	// 模拟重启：新建 App 实例，读取启动设置。
+	restarted := NewApp()
+	got := restarted.DesktopStartupSettings()
+	if got.DisplayMode != "compact" {
+		t.Fatalf("after restart DisplayMode = %q, want compact", got.DisplayMode)
+	}
+}
+
 func BenchmarkDesktopSettingsPayloads(b *testing.B) {
 	home := b.TempDir()
 	xdg := filepath.Join(home, ".config")
