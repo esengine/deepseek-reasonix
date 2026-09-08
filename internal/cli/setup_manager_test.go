@@ -383,6 +383,18 @@ func TestProviderSetupSessionSummaryReportsChanges(t *testing.T) {
 	}
 }
 
+func TestProviderSetupSummaryDoesNotLeakCredential(t *testing.T) {
+	s := newProviderSetupSession(setupTestConfig())
+	const secret = "rk_test_ABCDEF1234567890"
+	if err := s.setCredential("GROK_API_KEY", secret); err != nil {
+		t.Fatal(err)
+	}
+	text := strings.Join(s.summary(), "\n")
+	if strings.Contains(text, secret) {
+		t.Fatalf("summary leaked credential: %q", text)
+	}
+}
+
 func TestProviderSetupOperationReplayPreservesConcurrentUnrelatedChanges(t *testing.T) {
 	isolateUserConfig(t)
 	path := config.UserConfigPath()

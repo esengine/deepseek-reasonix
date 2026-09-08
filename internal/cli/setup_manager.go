@@ -677,7 +677,7 @@ func updateProviderKey(s *providerSetupSession, p config.ProviderEntry) {
 			return
 		}
 	}
-	value := ask(in, os.Stdout, fmt.Sprintf(i18n.M.SetupPromptAPIKeyFmt, p.APIKeyEnv), "")
+	value := askSecret(in, os.Stdout, fmt.Sprintf(i18n.M.SetupPromptAPIKeyFmt, p.APIKeyEnv))
 	if value == "" {
 		return
 	}
