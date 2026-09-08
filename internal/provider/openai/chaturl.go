@@ -17,7 +17,9 @@ func resolveOpenAIChatURL(baseURL string, extra map[string]any) string {
 	if canonical, ok := canonicalKnownVendorChatURL(requestURL); ok {
 		return canonical
 	}
-	if requestURL != "" {
+	// A request_url that merely repeats the base URL is a no-op: fall through
+	// to the derived endpoint instead of POSTing to the base itself.
+	if requestURL != "" && strings.TrimRight(requestURL, "/") != strings.TrimRight(strings.TrimSpace(baseURL), "/") {
 		return requestURL
 	}
 	legacyChatURL, _ := extra["chat_url"].(string)

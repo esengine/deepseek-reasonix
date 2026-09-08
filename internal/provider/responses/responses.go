@@ -141,6 +141,11 @@ func New(cfg Config) provider.Provider {
 	}
 	baseURL := strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/")
 	requestURL := strings.TrimSpace(cfg.RequestURL)
+	// A request_url that merely repeats the base URL is a no-op: fall through
+	// to the derived endpoint instead of POSTing to the base itself.
+	if requestURL != "" && strings.TrimRight(requestURL, "/") == baseURL {
+		requestURL = ""
+	}
 	if requestURL == "" {
 		requestURL = baseURL + "/responses"
 	}

@@ -90,6 +90,12 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	}
 	requestURL, _ := cfg.Extra["request_url"].(string)
 	requestURL = strings.TrimSpace(requestURL)
+	// A request_url that merely repeats the base root (e.g. the settings UI
+	// mirroring base_url into the exact-URL field) is a no-op: treat it as
+	// unset and derive the canonical endpoint instead of POSTing to the root.
+	if requestURL != "" && strings.TrimSuffix(strings.TrimRight(requestURL, "/"), "/v1") == root {
+		requestURL = ""
+	}
 	if requestURL == "" {
 		requestURL = root + "/v1/messages"
 	}

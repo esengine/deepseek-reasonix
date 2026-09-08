@@ -50,3 +50,17 @@ func TestFactoryUsesRequestURLAndIgnoresLegacyChatURL(t *testing.T) {
 		t.Fatalf("legacy requestURL = %q, want base-derived endpoint", got)
 	}
 }
+
+func TestRequestURLEqualToBaseURLIsIgnored(t *testing.T) {
+	p, err := newFromConfig(provider.Config{
+		BaseURL: "https://base.example.com/v1",
+		Model:   "m",
+		Extra:   map[string]any{"request_url": "https://base.example.com/v1"},
+	})
+	if err != nil {
+		t.Fatalf("newFromConfig: %v", err)
+	}
+	if got := p.(*client).requestURL; got != "https://base.example.com/v1/responses" {
+		t.Fatalf("requestURL = %q, want base-derived /responses endpoint", got)
+	}
+}
