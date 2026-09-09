@@ -115,7 +115,7 @@ cd DeepSeek-Reasonix
 
 #### CLI
 
-CLI 构建需要 **Go 1.25+**。模块固定了 `toolchain` 指令；
+CLI 构建需要 **Go 1.26+**。模块固定了 `toolchain` 指令；
 保持 `GOTOOLCHAIN=auto` 让 Go 自动下载固定的工具链，或自行安装。
 
 ```sh
