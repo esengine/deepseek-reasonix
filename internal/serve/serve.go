@@ -559,6 +559,7 @@ func (s *Server) handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", s.index)
 	mux.HandleFunc("GET /sessions/{id}", s.index)
+	mux.HandleFunc("GET /projects", s.projects)
 	mux.HandleFunc("GET /assets/logo-wordmark.svg", s.logoWordmark)
 	mux.HandleFunc("GET /provider-setup", s.providerSetupStatus)
 	mux.HandleFunc("POST /provider-setup", s.providerSetupSave)
