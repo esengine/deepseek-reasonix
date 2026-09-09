@@ -878,20 +878,7 @@ func (t *UseCapabilityTool) resolveSkillCall(skillName, id string, args json.Raw
 	// only exposes them (planner / plan mode).
 	for _, toolName := range []string{"run_skill", "read_only_skill", "read_skill"} {
 		if tl, ok := t.registry.Get(toolName); ok {
-			payload := args
-			if len(payload) == 0 || string(payload) == "null" {
-				payload = json.RawMessage(fmt.Sprintf(`{"name":%q}`, skillName))
-			} else {
-				var m map[string]any
-				if json.Unmarshal(payload, &m) == nil {
-					if _, has := m["name"]; !has {
-						m["name"] = skillName
-						if b, err := json.Marshal(m); err == nil {
-							payload = b
-						}
-					}
-				}
-			}
+			payload := normalizeSkillCapabilityArgs(skillName, args)
 			base.Target = tl
 			base.TargetName = toolName
 			base.ReadOnly = tl.ReadOnly()
@@ -900,6 +887,67 @@ func (t *UseCapabilityTool) resolveSkillCall(skillName, id string, args json.Raw
 		}
 	}
 	return t.resolveUnavailable(base, id, skillName, fmt.Sprintf("skill tools are not available for %q", skillName)), nil
+}
+
+func normalizeSkillCapabilityArgs(skillName string, args json.RawMessage) json.RawMessage {
+	raw := strings.TrimSpace(string(args))
+	if raw == "" || raw == "null" {
+		return marshalSkillPayload(map[string]any{"name": skillName})
+	}
+	var text string
+	if json.Unmarshal(args, &text) == nil {
+		return normalizeSkillCapabilityText(skillName, text)
+	}
+	var payload map[string]any
+	if json.Unmarshal(args, &payload) == nil {
+		return normalizeSkillCapabilityObject(skillName, payload)
+	}
+	return args
+}
+
+func normalizeSkillCapabilityText(skillName, text string) json.RawMessage {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return marshalSkillPayload(map[string]any{"name": skillName})
+	}
+	if strings.HasPrefix(trimmed, "{") {
+		var payload map[string]any
+		if json.Unmarshal([]byte(trimmed), &payload) == nil {
+			return normalizeSkillCapabilityObject(skillName, payload)
+		}
+	}
+	return marshalSkillPayload(map[string]any{"name": skillName, "arguments": trimmed})
+}
+
+func normalizeSkillCapabilityObject(skillName string, payload map[string]any) json.RawMessage {
+	if _, ok := payload["name"]; !ok {
+		payload["name"] = skillName
+	}
+	if _, ok := payload["arguments"]; !ok {
+		if task, hasTask := payload["task"]; hasTask {
+			payload["arguments"] = skillCapabilityTaskArgument(task)
+		}
+	}
+	return marshalSkillPayload(payload)
+}
+
+func skillCapabilityTaskArgument(task any) string {
+	if text, ok := task.(string); ok {
+		return strings.TrimSpace(text)
+	}
+	data, err := json.Marshal(task)
+	if err != nil {
+		return fmt.Sprint(task)
+	}
+	return string(data)
+}
+
+func marshalSkillPayload(payload map[string]any) json.RawMessage {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	return data
 }
 
 func taskToolName(name string) string {
