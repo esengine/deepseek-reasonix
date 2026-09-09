@@ -15,6 +15,8 @@
   &nbsp;·&nbsp;
   <a href="./docs/SPEC.zh-CN.md">规格</a>
   &nbsp;·&nbsp;
+  <a href="./docs/PLUGINS.zh-CN.md">插件</a>
+  &nbsp;·&nbsp;
   <a href="https://esengine.github.io/DeepSeek-Reasonix/">官方网站</a>
   &nbsp;·&nbsp;
   <strong><a href="https://discord.gg/XF78rEME2D">Discord</a></strong>

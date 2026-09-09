@@ -15,6 +15,8 @@
   &nbsp;·&nbsp;
   <a href="./docs/SPEC.md">Spec</a>
   &nbsp;·&nbsp;
+  <a href="./docs/PLUGINS.md">Plugins</a>
+  &nbsp;·&nbsp;
   <a href="https://esengine.github.io/DeepSeek-Reasonix/">Website</a>
   &nbsp;·&nbsp;
   <strong><a href="https://discord.gg/XF78rEME2D">Discord</a></strong>
@@ -232,7 +234,6 @@ Special thanks to [**Bernardxu123**](https://github.com/Bernardxu123) for design
   <br/>
   <sub>Built by the community at <a href="https://github.com/esengine/DeepSeek-Reasonix/graphs/contributors">esengine/DeepSeek-Reasonix</a></sub>
 </p>
-
 ---
 
 <p align="center"><sub><strong>Support this project</strong></sub></p>
