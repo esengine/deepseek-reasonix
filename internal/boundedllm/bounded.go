@@ -136,6 +136,7 @@ func Call(ctx context.Context, cfg Config, system, evidence string) (string, err
 	}
 
 	var text strings.Builder
+	var reasoning strings.Builder
 	for chunk := range ch {
 		switch chunk.Type {
 		case provider.ChunkText:
@@ -143,6 +144,19 @@ func Call(ctx context.Context, cfg Config, system, evidence string) (string, err
 			if text.Len() > maxOutputBytes {
 				cancel()
 				return "", fmt.Errorf("bounded reviewer output exceeded %d bytes", maxOutputBytes)
+			}
+		case provider.ChunkReasoning:
+			// Keep reasoning alongside text: a thinking-only vendor (DeepSeek
+			// on a thinking model as the fallback reviewer) streams its verdict
+			// into reasoning_content with an empty content block. Captured here
+			// it can stand in for the response, otherwise the goal evaluator and
+			// recovery reviewer would fail-closed on an "empty" verdict every
+			// turn (#9678). Bounded like text so an oversize thinking dump still
+			// fails closed rather than leaking past the budget.
+			reasoning.WriteString(chunk.Text)
+			if text.Len() == 0 && reasoning.Len() > maxOutputBytes {
+				cancel()
+				return "", fmt.Errorf("bounded reviewer reasoning exceeded %d bytes", maxOutputBytes)
 			}
 		case provider.ChunkUsage:
 			if chunk.Usage != nil {
@@ -158,6 +172,12 @@ func Call(ctx context.Context, cfg Config, system, evidence string) (string, err
 	}
 	if callCtx.Err() != nil && text.Len() == 0 {
 		return "", callCtx.Err()
+	}
+	if text.Len() == 0 && reasoning.Len() > 0 {
+		// No visible content but the model did think: fall back to the reasoning
+		// text so callers that extract a JSON verdict from the response still
+		// succeed on reasoning-only streams (#9678, cf. #6617 for the main loop).
+		return reasoning.String(), nil
 	}
 	return text.String(), nil
 }
