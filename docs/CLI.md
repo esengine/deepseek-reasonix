@@ -178,6 +178,26 @@ same care as a session transcript.
 reasonix run --metrics run.json --trajectory run.trajectory.jsonl "fix the failing test"
 ```
 
+### Turn phases
+
+While a turn runs, the host publishes a content-free phase so a frontend can
+say what the turn is doing. The CLI shows it on the spinner line; the desktop
+app shows it in the composer.
+
+| Phase | Emitted when | `capability_phases` bucket |
+| --- | --- | --- |
+| `working` | the turn starts, and again after each tool batch returns | `ProviderWaitMs` |
+| `checking` | a tool batch is about to execute | `ToolExecMs` |
+| `verifying` | the final-readiness check runs before a final answer | `ToolExecMs` |
+| `reviewing` | the delivery review gate inspects a mutation | `ReviewMs` |
+
+A phase is billed to its bucket when the next phase opens, so the durations in
+`--metrics` split a turn into model wait versus tool execution without replaying
+the run. Spans under a millisecond are dropped, and a turn that ends through an
+error or a pause rather than an answer does not bill its last span, so the
+buckets read as a lower bound rather than a full partition of the turn.
+`SubagentWaitMs`, `UserWaitMs` and `CompactMs` have no emitter yet and stay zero.
+
 ### Output formats
 
 | Format | Behavior |
