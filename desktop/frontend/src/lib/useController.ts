@@ -2197,6 +2197,12 @@ export function reducer(s: State, a: Action): State {
     case "checkpoints": return { ...s, checkpoints: a.checkpoints };
     case "hydrate_start": return {
       ...s,
+      pendingPrompt: false,
+      approval: undefined,
+      ask: undefined,
+      running: false,
+      turnActive: false,
+      cancellable: false,
       hydrating: true,
       hydrateReason: a.reason,
       hydrateError: undefined,
