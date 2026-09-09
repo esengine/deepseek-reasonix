@@ -2,15 +2,15 @@
   "limits": {
     "banner": 13,
     "commented-code": 0,
-    "complexity": 1852,
-    "essay": 1885,
-    "file-size": 100305,
-    "function-size": 8048,
+    "complexity": 1849,
+    "essay": 1884,
+    "file-size": 100087,
+    "function-size": 8051,
     "layering": 1,
     "marker": 0,
     "narrative": 64,
     "struct-state": 108,
-    "test-file-size": 68452
+    "test-file-size": 68414
   },
   "files": {
     "cmd/e2ebench/main.go": {
@@ -25,13 +25,13 @@
     "desktop/app.go": {
       "complexity": 55,
       "essay": 60,
-      "file-size": 10825,
+      "file-size": 10809,
       "function-size": 353,
       "struct-state": 10
     },
     "desktop/app_test.go": {
       "essay": 2,
-      "test-file-size": 10340
+      "test-file-size": 10353
     },
     "desktop/bot_bridge.go": {
       "essay": 3
@@ -93,7 +93,7 @@
       "file-size": 2643
     },
     "desktop/frontend/src/components/Composer.tsx": {
-      "file-size": 3858
+      "file-size": 3900
     },
     "desktop/frontend/src/components/ContextPanel.tsx": {
       "file-size": 36
@@ -108,16 +108,16 @@
       "file-size": 27
     },
     "desktop/frontend/src/components/ProjectTree.tsx": {
-      "file-size": 1467
+      "file-size": 1320
     },
     "desktop/frontend/src/components/RichComposerInput.tsx": {
       "file-size": 141
     },
     "desktop/frontend/src/components/SettingsPanel.tsx": {
-      "file-size": 6524
+      "file-size": 6529
     },
     "desktop/frontend/src/components/StatusBar.tsx": {
-      "file-size": 25
+      "file-size": 20
     },
     "desktop/frontend/src/components/ThemeGallery.tsx": {
       "file-size": 490
@@ -135,7 +135,7 @@
       "file-size": 177
     },
     "desktop/frontend/src/lib/bridge.ts": {
-      "file-size": 4790
+      "file-size": 4803
     },
     "desktop/frontend/src/lib/crash.ts": {
       "file-size": 212
@@ -144,10 +144,10 @@
       "file-size": 229
     },
     "desktop/frontend/src/lib/types.ts": {
-      "file-size": 1593
+      "file-size": 1599
     },
     "desktop/frontend/src/lib/useController.ts": {
-      "file-size": 4252
+      "file-size": 4262
     },
     "desktop/heartbeat.go": {
       "essay": 7
@@ -199,7 +199,7 @@
     },
     "desktop/remote_tab.go": {
       "essay": 8,
-      "file-size": 100
+      "file-size": 121
     },
     "desktop/remote_tab_commands.go": {
       "essay": 1
@@ -410,7 +410,7 @@
     },
     "internal/agent/execute_batch.go": {
       "complexity": 23,
-      "function-size": 152
+      "function-size": 155
     },
     "internal/agent/execute_one.go": {
       "complexity": 1,
@@ -470,7 +470,7 @@
       "essay": 1
     },
     "internal/agent/run_loop.go": {
-      "essay": 10,
+      "essay": 9,
       "function-size": 2
     },
     "internal/agent/run_usage.go": {
@@ -641,7 +641,7 @@
     },
     "internal/checkpoint/checkpoint.go": {
       "essay": 5,
-      "file-size": 148
+      "file-size": 149
     },
     "internal/checkpoint/transaction.go": {
       "complexity": 32,
@@ -805,7 +805,7 @@
     },
     "internal/config/config.go": {
       "essay": 22,
-      "file-size": 1512,
+      "file-size": 1513,
       "narrative": 2
     },
     "internal/config/credentials.go": {
@@ -816,7 +816,7 @@
     },
     "internal/config/edit.go": {
       "essay": 5,
-      "file-size": 1615
+      "file-size": 1616
     },
     "internal/config/edit_test.go": {
       "test-file-size": 2409
@@ -866,7 +866,7 @@
     "internal/control/controller.go": {
       "complexity": 12,
       "essay": 87,
-      "file-size": 5103,
+      "file-size": 5105,
       "function-size": 76,
       "narrative": 4,
       "struct-state": 16
@@ -913,7 +913,7 @@
       "file-size": 554
     },
     "internal/control/refs_test.go": {
-      "test-file-size": 141
+      "test-file-size": 90
     },
     "internal/control/sessionpath.go": {
       "essay": 1
@@ -951,7 +951,7 @@
     },
     "internal/event/event.go": {
       "essay": 6,
-      "file-size": 102,
+      "file-size": 74,
       "narrative": 1
     },
     "internal/eventwire/wire.go": {
@@ -960,7 +960,7 @@
     "internal/evidence/evidence.go": {
       "complexity": 6,
       "essay": 6,
-      "file-size": 1986
+      "file-size": 1900
     },
     "internal/evidence/evidence_test.go": {
       "essay": 1,
@@ -1215,7 +1215,7 @@
     },
     "internal/provider/provider.go": {
       "essay": 7,
-      "file-size": 314
+      "file-size": 287
     },
     "internal/provider/responses/responses.go": {
       "complexity": 49,
@@ -1462,8 +1462,7 @@
       "essay": 4
     },
     "internal/turnevent/ledger.go": {
-      "complexity": 3,
-      "file-size": 312,
+      "file-size": 301,
       "struct-state": 3
     },
     "sdk/go/examples/fullsidecar/main.go": {
