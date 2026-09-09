@@ -415,26 +415,23 @@ func verifyCommandFromSession(ctx context.Context, command string) bool {
 		return false
 	}
 	toolName := firstWord(lookup)
-	failed := failedCallIDs(msgs)
-
-	for _, msg := range msgs {
-		for _, tc := range msg.ToolCalls {
-			if failed[tc.ID] {
-				continue
-			}
-			cmd := extractCommandFromCall(tc.Name, tc.Arguments)
-			if cmd == "" {
-				continue
-			}
-			if evidence.CommandMatches(lookup, cmd) {
-				return true
-			}
-			if toolName != "" && toolName != "bash" && tc.Name == toolName {
-				return true
-			}
+	found := false
+	provider.WalkToolCallExchanges(msgs, func(exchange provider.ToolCallExchange) bool {
+		if sessionToolResultFailed(exchange.Result.Content) {
+			return true
 		}
-	}
-	return false
+		cmd := extractCommandFromCall(exchange.Call.Name, exchange.Call.Arguments)
+		if cmd == "" {
+			return true
+		}
+		if evidence.CommandMatches(lookup, cmd) ||
+			(toolName != "" && toolName != "bash" && exchange.Call.Name == toolName) {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
 }
 
 // verifyPathsFromSession is the diff/files analogue of verifyCommandFromSession:
@@ -448,17 +445,11 @@ func verifyPathsFromSession(ctx context.Context, paths []string, wantWrite bool)
 	return evidence.PathsProvenInSession(msgs, paths, wantWrite)
 }
 
-func failedCallIDs(msgs []provider.Message) map[string]bool {
-	failed := map[string]bool{}
-	for _, msg := range msgs {
-		if msg.Role != provider.RoleTool || msg.ToolCallID == "" {
-			continue
-		}
-		if strings.HasPrefix(msg.Content, "error:") || strings.HasPrefix(msg.Content, "blocked:") {
-			failed[msg.ToolCallID] = true
-		}
-	}
-	return failed
+func sessionToolResultFailed(content string) bool {
+	content = strings.TrimSpace(content)
+	return content == "cancelled: context cancelled before execution" ||
+		strings.HasPrefix(content, "error:") ||
+		strings.HasPrefix(content, "blocked:")
 }
 
 func receiptHint(label string, items []string) string {
@@ -487,29 +478,21 @@ func allCommandHints(ctx context.Context, ledger *evidence.Ledger) string {
 		}
 	}
 	if msgs, ok := evidence.SessionMessagesFromContext(ctx); ok {
-		failed := failedCallIDs(msgs)
-		for _, msg := range msgs {
-			for _, tc := range msg.ToolCalls {
-				if failed[tc.ID] {
-					continue
-				}
-				if tc.Name == "todo_write" || tc.Name == "complete_step" {
-					continue
-				}
-				c := extractCommandFromCall(tc.Name, tc.Arguments)
-				if c == "" || seen[c] {
-					continue
-				}
-				seen[c] = true
-				cmds = append(cmds, c)
-				if len(cmds) >= 12 {
-					break
-				}
+		provider.WalkToolCallExchanges(msgs, func(exchange provider.ToolCallExchange) bool {
+			if sessionToolResultFailed(exchange.Result.Content) {
+				return true
 			}
-			if len(cmds) >= 12 {
-				break
+			if exchange.Call.Name == "todo_write" || exchange.Call.Name == "complete_step" {
+				return true
 			}
-		}
+			c := extractCommandFromCall(exchange.Call.Name, exchange.Call.Arguments)
+			if c == "" || seen[c] {
+				return true
+			}
+			seen[c] = true
+			cmds = append(cmds, c)
+			return len(cmds) < 12
+		})
 	}
 	if len(cmds) == 0 {
 		return ""

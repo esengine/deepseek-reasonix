@@ -1468,7 +1468,7 @@ func TodoStateFromContext(ctx context.Context) ([]TodoItem, bool) {
 	return append([]TodoItem(nil), todos...), ok
 }
 
-// PathsProvenInSession reports whether every path is covered by a successful
+// PathsProvenInSession reports whether every path is covered by an explicitly paired,
 // (non-errored) tool call somewhere in msgs — the cross-turn fallback for diff
 // and files evidence, mirroring verifyCommandFromSession for the per-turn
 // ledger's path receipts (which reset each turn). wantWrite restricts to writer
@@ -1478,41 +1478,33 @@ func PathsProvenInSession(msgs []provider.Message, paths []string, wantWrite boo
 	if len(wanted) == 0 {
 		return false
 	}
-	failed := failedSessionCallIDs(msgs)
 	found := map[string]bool{}
-	for _, msg := range msgs {
-		for _, tc := range msg.ToolCalls {
-			if failed[tc.ID] {
-				continue
-			}
-			r := ReceiptFromToolCall(tc.Name, json.RawMessage(tc.Arguments), true, false)
-			if wantWrite && !r.Write {
-				continue
-			}
-			if !wantWrite && !r.Read && !r.Write {
-				continue
-			}
-			for _, p := range normalizePaths(r.Paths) {
-				if _, ok := wanted[p]; ok {
-					found[p] = true
-				}
+	provider.WalkToolCallExchanges(msgs, func(exchange provider.ToolCallExchange) bool {
+		if sessionToolResultFailed(exchange.Result.Content) {
+			return true
+		}
+		r := ReceiptFromToolCall(exchange.Call.Name, json.RawMessage(exchange.Call.Arguments), true, false)
+		if wantWrite && !r.Write {
+			return true
+		}
+		if !wantWrite && !r.Read && !r.Write {
+			return true
+		}
+		for _, p := range normalizePaths(r.Paths) {
+			if _, ok := wanted[p]; ok {
+				found[p] = true
 			}
 		}
-	}
+		return len(found) != len(wanted)
+	})
 	return len(found) == len(wanted)
 }
 
-func failedSessionCallIDs(msgs []provider.Message) map[string]bool {
-	failed := map[string]bool{}
-	for _, msg := range msgs {
-		if msg.Role != provider.RoleTool || msg.ToolCallID == "" {
-			continue
-		}
-		if strings.HasPrefix(msg.Content, "error:") || strings.HasPrefix(msg.Content, "blocked:") {
-			failed[msg.ToolCallID] = true
-		}
-	}
-	return failed
+func sessionToolResultFailed(content string) bool {
+	content = strings.TrimSpace(content)
+	return content == "cancelled: context cancelled before execution" ||
+		strings.HasPrefix(content, "error:") ||
+		strings.HasPrefix(content, "blocked:")
 }
 
 func ReceiptFromToolCall(toolName string, args json.RawMessage, success bool, readOnly bool) Receipt {

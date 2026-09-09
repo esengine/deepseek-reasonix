@@ -1022,14 +1022,9 @@ func (c *client) readStream(ctx context.Context, resp *http.Response, out chan<-
 	}
 
 	sort.Ints(order)
+	assignSyntheticToolCallIDs(acc, order)
 	for _, idx := range order {
 		tc := acc[idx]
-		if tc.ID == "" {
-			// Some OpenAI-compatible gateways stream tool calls by index with no id.
-			// Synthesize a stable one so the result can be paired back to its call —
-			// an empty tool_call_id collapses multi-tool turns downstream.
-			tc.ID = fmt.Sprintf("call_%d", idx)
-		}
 		if !sendChunk(ctx, out, provider.Chunk{Type: provider.ChunkToolCall, ToolCall: tc}) {
 			return emitted, ctx.Err()
 		}

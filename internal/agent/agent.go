@@ -1511,56 +1511,44 @@ func (a *Agent) RebuildTodoState() {
 // fresh load or a rewind (the truncated history yields the historical state).
 // Empty after compaction drops the todo_write — no worse than no canonical list.
 func (a *Agent) rebuildTodoState(msgs []provider.Message) {
-	successful := successfulToolCallIDs(msgs)
 	var todos []evidence.TodoItem
 	baseIdx := -1
-	for i, msg := range msgs {
-		for _, tc := range msg.ToolCalls {
-			if tc.Name != "todo_write" || !successful[tc.ID] {
-				continue
-			}
-			rec := evidence.ReceiptFromToolCall(tc.Name, json.RawMessage(tc.Arguments), true, true)
-			// A successful empty todo_write is an explicit clear. Preserve it as the
-			// latest base so history reloads do not resurrect an older non-empty list.
-			todos = evidence.NormalizeSerialTodos(rec.Todos)
-			baseIdx = i
+	provider.WalkToolCallExchanges(msgs, func(exchange provider.ToolCallExchange) bool {
+		tc := exchange.Call
+		if tc.Name != "todo_write" || toolResultFailed(exchange.Result.Content) {
+			return true
 		}
-	}
+		rec := evidence.ReceiptFromToolCall(tc.Name, json.RawMessage(tc.Arguments), true, true)
+		// A successful empty todo_write is an explicit clear. Preserve it as the
+		// latest base so history reloads do not resurrect an older non-empty list.
+		todos = evidence.NormalizeSerialTodos(rec.Todos)
+		baseIdx = exchange.AssistantIndex
+		return true
+	})
+
 	if baseIdx < 0 {
 		a.setTodoState(nil)
 		return
 	}
-	for i := baseIdx; i < len(msgs); i++ {
-		for _, tc := range msgs[i].ToolCalls {
-			if tc.Name != "complete_step" || !successful[tc.ID] {
-				continue
-			}
-			rec := evidence.ReceiptFromToolCall(tc.Name, json.RawMessage(tc.Arguments), true, true)
-			if m, ok := evidence.MatchStep(rec.Step, todos); ok {
-				evidence.AdvanceSerialTodo(todos, m.Index-1)
-			}
+	provider.WalkToolCallExchanges(msgs, func(exchange provider.ToolCallExchange) bool {
+		tc := exchange.Call
+		if exchange.AssistantIndex < baseIdx || tc.Name != "complete_step" || toolResultFailed(exchange.Result.Content) {
+			return true
 		}
-	}
+		rec := evidence.ReceiptFromToolCall(tc.Name, json.RawMessage(tc.Arguments), true, true)
+		if m, ok := evidence.MatchStep(rec.Step, todos); ok {
+			evidence.AdvanceSerialTodo(todos, m.Index-1)
+		}
+		return true
+	})
 	a.setTodoState(todos)
 	a.consumeTodoOnlyReadinessMarkerIfResolved()
 }
 
-func successfulToolCallIDs(msgs []provider.Message) map[string]bool {
-	successful := map[string]bool{}
-	for _, msg := range msgs {
-		if msg.Role != provider.RoleTool || msg.ToolCallID == "" {
-			continue
-		}
-		if !toolResultFailed(msg.Content) {
-			successful[msg.ToolCallID] = true
-		}
-	}
-	return successful
-}
-
 func toolResultFailed(content string) bool {
 	content = strings.TrimSpace(content)
-	return strings.HasPrefix(content, "error:") ||
+	return content == "cancelled: context cancelled before execution" ||
+		strings.HasPrefix(content, "error:") ||
 		strings.HasPrefix(content, "blocked:") ||
 		strings.HasPrefix(content, "Error:") ||
 		strings.HasPrefix(content, "[error")
