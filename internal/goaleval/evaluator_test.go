@@ -12,11 +12,12 @@ import (
 )
 
 type scriptedProvider struct {
-	turns   []string // one response per call, recycled
-	err     error    // stream-open error
-	timeout bool     // hang until ctx deadline
-	usage   *provider.Usage
-	calls   int
+	turns     []string // one response per call, recycled
+	reasoning string   // thinking-mode reasoning_content streamed before Text
+	err       error    // stream-open error
+	timeout   bool     // hang until ctx deadline
+	usage     *provider.Usage
+	calls     int
 }
 
 func (s *scriptedProvider) Name() string { return "scripted" }
@@ -26,7 +27,7 @@ func (s *scriptedProvider) Stream(ctx context.Context, _ provider.Request) (<-ch
 	if s.err != nil {
 		return nil, s.err
 	}
-	ch := make(chan provider.Chunk, 2)
+	ch := make(chan provider.Chunk, 3)
 	if s.timeout {
 		<-ctx.Done()
 		close(ch)
@@ -35,6 +36,9 @@ func (s *scriptedProvider) Stream(ctx context.Context, _ provider.Request) (<-ch
 	i := s.calls - 1
 	if i >= len(s.turns) {
 		i = len(s.turns) - 1
+	}
+	if s.reasoning != "" {
+		ch <- provider.Chunk{Type: provider.ChunkReasoning, Text: s.reasoning}
 	}
 	ch <- provider.Chunk{Type: provider.ChunkText, Text: s.turns[i]}
 	if s.usage != nil {
@@ -73,6 +77,34 @@ func TestEvaluateParsesVerdicts(t *testing.T) {
 				t.Fatalf("outcome = %q, want %q", verdict.Outcome, tc.outcome)
 			}
 		})
+	}
+}
+
+func TestEvaluateParsesReasoningOnlyVerdicts(t *testing.T) {
+	// Thinking-mode providers (#9678) stream the substance into
+	// reasoning_content and finish with an empty content block. The evaluator
+	// must still produce a verdict instead of failing closed with
+	// "empty goal evaluator response".
+	prov := &scriptedProvider{
+		turns:     []string{""},
+		reasoning: "The goal asked to fix the parser. I considered {\"outcome\":\"continue\"} as an example format first.\nFinal judgment: {\"outcome\":\"complete\",\"reason\":\"the goal is done\"}",
+	}
+	verdict, err := evaluate(t, prov, GoalEvidence{GoalContract: "fix the parser"})
+	if err != nil {
+		t.Fatalf("Evaluate() error = %v", err)
+	}
+	if verdict.Outcome != OutcomeComplete {
+		t.Fatalf("outcome = %q, want %q", verdict.Outcome, OutcomeComplete)
+	}
+	if verdict.Reason != "the goal is done" {
+		t.Fatalf("reason = %q, want %q", verdict.Reason, "the goal is done")
+	}
+
+	// Prose-only reasoning without any JSON still fails closed, but with the
+	// parse error rather than "empty response".
+	prov = &scriptedProvider{turns: []string{""}, reasoning: "I thought about it, but reached no conclusion."}
+	if _, err := evaluate(t, prov, GoalEvidence{}); err == nil || strings.Contains(err.Error(), "empty goal evaluator response") {
+		t.Fatalf("Evaluate() error = %v, want invalid-JSON fail-closed error", err)
 	}
 }
 

@@ -136,6 +136,7 @@ func Call(ctx context.Context, cfg Config, system, evidence string) (string, err
 	}
 
 	var text strings.Builder
+	var reasoning strings.Builder
 	for chunk := range ch {
 		switch chunk.Type {
 		case provider.ChunkText:
@@ -144,6 +145,8 @@ func Call(ctx context.Context, cfg Config, system, evidence string) (string, err
 				cancel()
 				return "", fmt.Errorf("bounded reviewer output exceeded %d bytes", maxOutputBytes)
 			}
+		case provider.ChunkReasoning:
+			reasoning.WriteString(chunk.Text)
 		case provider.ChunkUsage:
 			if chunk.Usage != nil {
 				u := *chunk.Usage
@@ -158,6 +161,14 @@ func Call(ctx context.Context, cfg Config, system, evidence string) (string, err
 	}
 	if callCtx.Err() != nil && text.Len() == 0 {
 		return "", callCtx.Err()
+	}
+	if text.Len() == 0 && reasoning.Len() > 0 {
+		// Thinking-mode providers (#9678) stream the substance into
+		// reasoning_content and finish with stop plus an empty content block.
+		// Return the reasoning text instead of a bare "" so callers can parse
+		// their JSON contract; otherwise every thinking model fails closed as
+		// an "empty response" even though it answered.
+		return reasoning.String(), nil
 	}
 	return text.String(), nil
 }

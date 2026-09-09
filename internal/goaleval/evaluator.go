@@ -230,7 +230,13 @@ func parseVerdict(text string) (Verdict, error) {
 	if text == "" {
 		return Verdict{}, fmt.Errorf("empty goal evaluator response")
 	}
-	if i := strings.Index(text, "{"); i >= 0 {
+	// Reasoning-only responses (#9678) arrive as thinking prose that may quote
+	// example JSON before the final verdict. Slicing from the first "{" to the
+	// last "}" spans both and fails to unmarshal; prefer the last balanced
+	// top-level object, falling back to the previous slice when none parses.
+	if obj := lastJSONObject(text); obj != "" {
+		text = obj
+	} else if i := strings.Index(text, "{"); i >= 0 {
 		if j := strings.LastIndex(text, "}"); j > i {
 			text = text[i : j+1]
 		}
@@ -248,6 +254,48 @@ func parseVerdict(text string) (Verdict, error) {
 		v.Reason = clip(v.Reason, MaxReasonBytes)
 	}
 	return v, nil
+}
+
+// lastJSONObject returns the last balanced top-level JSON object in s, or ""
+// when none. Braces inside string literals are ignored; the scan is a heuristic
+// extraction for prose-wrapped model output, not a general JSON parser.
+func lastJSONObject(s string) string {
+	best := ""
+	depth := 0
+	start := -1
+	inStr := false
+	esc := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if inStr {
+			if esc {
+				esc = false
+			} else if c == '\\' {
+				esc = true
+			} else if c == '"' {
+				inStr = false
+			}
+			continue
+		}
+		switch c {
+		case '"':
+			inStr = true
+		case '{':
+			if depth == 0 {
+				start = i
+			}
+			depth++
+		case '}':
+			if depth > 0 {
+				depth--
+				if depth == 0 && start >= 0 {
+					best = s[start : i+1]
+					start = -1
+				}
+			}
+		}
+	}
+	return best
 }
 
 // clip truncates s to at most max bytes at a rune boundary.
