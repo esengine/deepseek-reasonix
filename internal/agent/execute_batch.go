@@ -158,7 +158,16 @@ func (a *Agent) executeBatch(ctx context.Context, turn *turnRuntime, calls []pro
 		}
 		start := time.Now()
 		s.startedAt[i] = start.UnixMilli()
-		s.outcomes[i] = a.executeOne(ctx, turn, s.calls[i])
+		// Claude Code-style interrupt: tools with InterruptBehaviorContinue
+		// (bash) get a background-derived context so they keep running even
+		// when the turn is cancelled by a user interrupt.
+		toolCtx := ctx
+		if t, _, _ := a.svc.tools.ResolveCall(s.calls[i].Name); t != nil {
+			if ib, ok := t.(tool.Interruptible); ok && ib.ToolInterruptBehavior() == tool.InterruptBehaviorContinue {
+				toolCtx = context.Background()
+			}
+		}
+		s.outcomes[i] = a.executeOne(toolCtx, turn, s.calls[i])
 		recordWorkspaceMutation(a.svc.sink, s.outcomes[i].workspaceMutation)
 		if s.outcomes[i].executed {
 			s.surfaceWriters[i] = s.outcomes[i].workspaceMutation != nil
@@ -291,6 +300,14 @@ func (a *Agent) executeBatch(ctx context.Context, turn *turnRuntime, calls []pro
 			// This prevents starting new tools when a previous tool's execution
 			// triggered cancellation.
 			if ctx.Err() != nil || batchErr != nil {
+				// Claude Code-style interrupt: tools with InterruptBehaviorContinue
+				// (bash) keep running in the background instead of being killed.
+				if t, _, _ := a.svc.tools.ResolveCall(calls[i].Name); t != nil {
+					if ib, ok := t.(tool.Interruptible); ok && ib.ToolInterruptBehavior() == tool.InterruptBehaviorContinue {
+						go a.executeOne(context.Background(), turn, calls[i])
+						outcomes[i] = toolOutcome{output: "interrupted: running in background"}
+					}
+				}
 				markCancelled(i)
 				break
 			}

@@ -49,6 +49,29 @@ type CallClass struct {
 // executing discovery, starting a process, or making a network request.
 type BatchClassifier interface {
 	ClassifyCall(json.RawMessage) CallClass
+// InterruptBehavior controls how a tool responds to a user interrupt (new
+// message submitted while the tool is executing). This enables the Claude
+// Code-style "steer in real-time" UX: long-running tools like bash continue
+// in the background while the user's new message enters the next turn.
+type InterruptBehavior int
+
+const (
+	// InterruptBehaviorCancel (default) stops the tool immediately when the
+	// turn is interrupted. Suitable for quick, stateless tools.
+	InterruptBehaviorCancel InterruptBehavior = iota
+	// InterruptBehaviorContinue keeps the tool running in the background
+	// when the turn is interrupted. The tool detaches from the turn context
+	// and its result is discarded (the model won't see it). Suitable for
+	// long-running tools like bash where killing mid-execution is wasteful.
+	InterruptBehaviorContinue
+)
+
+// Interruptible is an optional capability a Tool may implement to declare
+// its interrupt behavior. Tools that don't implement this interface default
+// to InterruptBehaviorCancel.
+type Interruptible interface {
+	// ToolInterruptBehavior returns how this tool responds to user interrupts.
+	ToolInterruptBehavior() InterruptBehavior
 }
 
 // ContextualTool is an execution-time availability contract for tools whose

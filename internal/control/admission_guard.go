@@ -63,6 +63,13 @@ func (c *Controller) admitGuardedTurn(body func(ctx context.Context) error, park
 	}
 	if c.running {
 		if parkWhileRunning {
+			// Claude Code-style interrupt: if the current turn is executing
+			// tools, signal it to end gracefully (bash keeps running in
+			// background). This lets the parked turn start sooner.
+			c.interrupting = true
+			if c.cancel != nil {
+				c.cancel()
+			}
 			c.parkedTurns = append(c.parkedTurns, body)
 			c.mu.Unlock()
 			return turnParked

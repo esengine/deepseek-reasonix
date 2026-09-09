@@ -149,6 +149,14 @@ func (b bash) resolved() sandbox.Shell {
 // command happens to be read-only — the agent batch decision can't tell.
 func (bash) ReadOnly() bool { return false }
 
+// ToolInterruptBehavior returns InterruptBehaviorContinue: when the user
+// submits a new message while bash is executing, the process keeps running
+// in the background instead of being killed. This implements the Claude
+// Code-style "steer in real-time" UX.
+func (bash) ToolInterruptBehavior() tool.InterruptBehavior {
+	return tool.InterruptBehaviorContinue
+}
+
 // SnipHint keeps both ends of command output equally: a build/test run's
 // failure usually sits at the tail while the command and early context sit at
 // the head, so neither end can be favored.
