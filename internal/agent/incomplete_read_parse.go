@@ -65,33 +65,11 @@ func parseReadFileArgs(args json.RawMessage) (readFileArgs, bool) {
 }
 
 func parseReadFileTrailer(output string) readFileTrailer {
-	const safetyPrefix = "\n[read_file local safety page; next_offset="
-	if start := strings.LastIndex(output, safetyPrefix); start >= 0 && strings.HasSuffix(output, "]\n") {
-		fields := strings.TrimSuffix(output[start+len(safetyPrefix):], "]\n")
-		parts := strings.Fields(fields)
-		if len(parts) == 2 {
-			next, nextErr := strconv.Atoi(parts[0])
-			endText := strings.TrimPrefix(parts[1], "requested_end=")
-			end, endErr := strconv.Atoi(endText)
-			if nextErr == nil && endErr == nil && next >= 0 && end >= next {
-				return readFileTrailer{nextOffset: next, requestedEnd: end, hasMore: true, localSafety: true}
-			}
-		}
+	t := tool.ParseReadTrailer(output)
+	return readFileTrailer{
+		nextOffset: t.NextOffset, requestedEnd: t.RequestedEnd,
+		hasMore: t.HasMore, localSafety: t.LocalSafety,
 	}
-	const prefix = "\n[more lines below; pass offset="
-	start := strings.LastIndex(output, prefix)
-	if start < 0 || !strings.HasSuffix(output, "]\n") {
-		return readFileTrailer{}
-	}
-	value := output[start+len(prefix):]
-	if end := strings.IndexAny(value, " ]\r\n"); end >= 0 {
-		value = value[:end]
-	}
-	n, err := strconv.Atoi(value)
-	if err != nil || n < 0 {
-		return readFileTrailer{}
-	}
-	return readFileTrailer{nextOffset: n, hasMore: true}
 }
 
 func readFileRecoveryOffset(output string) (int, bool) {

@@ -42,17 +42,21 @@ func TestReadFileLocalSafetyPagesExplicitWindowWithoutGaps(t *testing.T) {
 	if start < 0 {
 		t.Fatal("first page did not include the local safety trailer")
 	}
-	fields := strings.Fields(strings.TrimSuffix(first[start+len(prefix):], "]\n"))
-	if len(fields) != 2 || !strings.HasPrefix(fields[1], "requested_end=") {
+	rest := strings.TrimSuffix(first[start+len(prefix):], "]\n")
+	fields := strings.Fields(rest)
+	if len(fields) < 2 || !strings.HasPrefix(fields[1], "requested_end=") {
 		t.Fatalf("safety trailer fields=%q", fields)
 	}
 	next, err := strconv.Atoi(fields[0])
 	if err != nil || next <= 0 || next >= totalLines {
 		t.Fatalf("next_offset=%d err=%v", next, err)
 	}
-	requestedEnd, err := strconv.Atoi(strings.TrimPrefix(fields[1], "requested_end="))
+	requestedEnd, err := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(fields[1], "requested_end="), ";"))
 	if err != nil || requestedEnd != totalLines {
 		t.Fatalf("requested_end=%d err=%v", requestedEnd, err)
+	}
+	if !strings.Contains(rest, "output capped at 8 MiB") {
+		t.Fatalf("safety trailer missing 8 MiB notice: %q", rest)
 	}
 	second, err := (readFile{}).scan(strings.NewReader(source.String()), next, requestedEnd-next)
 	if err != nil {

@@ -130,7 +130,7 @@ func readStrategyPreview(raw, readID string, totalTokens, limitTokens int) strin
 	if newline := strings.LastIndexByte(head, '\n'); newline >= 0 {
 		head = head[:newline+1]
 	}
-	return fmt.Sprintf("%s\n[INCOMPLETE READ: read_id=%s; complete content does not fit the dynamic context budget (estimated_tokens=%d budget_tokens=%d). This prefix is not whole-file evidence. Follow the restricted grep/read strategy from the next host message.]\n", head, readID, totalTokens, limitTokens)
+	return fmt.Sprintf("%s\n[PARTIAL READ: read_id=%s; complete content does not fit the dynamic context budget (estimated_tokens=%d budget_tokens=%d). This prefix is not whole-file evidence. Prefer grep plus narrow read_file windows; independent work may continue when the visible prefix is enough.]\n", head, readID, totalTokens, limitTokens)
 }
 
 // finalizeIncompleteReadOutcome is called by executeBatch.finalize in provider

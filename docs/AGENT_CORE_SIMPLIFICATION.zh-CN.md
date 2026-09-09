@@ -21,7 +21,9 @@
   typed report 等显式流程保留自己的约束。
 - compaction 默认单次摘要;chunked/tree-reduce 高级恢复仅限显式场景
   (手动 `/compact` 与明确标记的 recovery workflow)。
-- final readiness、工具安全、取消、预算和 incomplete-read 继续作为硬边界。
+- final readiness、工具安全、取消和预算继续作为硬边界。`read_file` 分页/未付清
+  覆盖只是提示：未付清页不会冻结未声明目标的工具，也不会拒绝最终回答。路径级
+  写证据与主机 Stop（预算/策略停机）仍然保留。
 - 旧配置/旧状态保留一版读取兼容;新运行时不再执行旧 fallback。
 
 ## 指标基线
@@ -69,7 +71,7 @@
 | 完全零内容走统一 `EMPTY_RESPONSE` retry | `TestRunRetriesZeroContentWithTheSameFrozenRequest` |
 | retry 耗尽返回明确协议错误 | `TestRunStopsAfterExhaustedZeroContentRetriesWithoutCommittingEmptyMessages` |
 | strict provider 缺失 reasoning 只做一次冻结请求重试 | `TestRunSilentlyRecoversMissingToolCallReasoning` 及 `loop_e2e_test.go`/`retry_e2e_test.go` 的 replay 套件(#9776 修复) |
-| incomplete-read 门 | `incomplete_read_test.go` |
+| read_file 分页提示（不冻写/收尾） | `internal/boot/effect_read_file_test.go`、`incomplete_read_test.go`、`read_pipeline_regression_test.go` |
 | final readiness | `final_readiness_test.go` |
 | 取消 | `cancel_test.go` |
 | task/token/cost 预算 | `run_budget_test.go` |

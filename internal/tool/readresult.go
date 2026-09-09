@@ -185,28 +185,46 @@ func ParseReadTrailer(output string) ReadTrailer {
 	if start := strings.LastIndex(output, safetyPrefix); start >= 0 && strings.HasSuffix(output, "]\n") {
 		fields := strings.TrimSuffix(output[start+len(safetyPrefix):], "]\n")
 		parts := strings.Fields(fields)
-		if len(parts) == 2 {
+		if len(parts) >= 2 {
 			next, nextErr := strconv.Atoi(parts[0])
-			end, endErr := strconv.Atoi(strings.TrimPrefix(parts[1], "requested_end="))
+			end, endErr := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(parts[1], "requested_end="), ";"))
 			if nextErr == nil && endErr == nil && next >= 0 && end >= next {
 				return ReadTrailer{NextOffset: next, RequestedEnd: end, HasMore: true, LocalSafety: true}
 			}
 		}
 	}
-	const prefix = "\n[more lines below; pass offset="
-	start := strings.LastIndex(output, prefix)
+	if n, ok := readTrailerOffset(output, "\n[PARTIAL view:", "pass offset="); ok {
+		return ReadTrailer{NextOffset: n, HasMore: true}
+	}
+	if n, ok := readTrailerOffset(output, "\n[more lines below; pass offset=", ""); ok {
+		return ReadTrailer{NextOffset: n, HasMore: true}
+	}
+	return ReadTrailer{}
+}
+
+func readTrailerOffset(output, marker, field string) (int, bool) {
+	start := strings.LastIndex(output, marker)
 	if start < 0 || !strings.HasSuffix(output, "]\n") {
-		return ReadTrailer{}
+		return 0, false
 	}
-	value := output[start+len(prefix):]
-	if end := strings.IndexAny(value, " ]\r\n"); end >= 0 {
-		value = value[:end]
+	segment := output[start:]
+	if field != "" {
+		idx := strings.Index(segment, field)
+		if idx < 0 {
+			return 0, false
+		}
+		segment = segment[idx+len(field):]
+	} else {
+		segment = segment[len(marker):]
 	}
-	n, err := strconv.Atoi(value)
+	if end := strings.IndexAny(segment, " ]\r\n"); end >= 0 {
+		segment = segment[:end]
+	}
+	n, err := strconv.Atoi(segment)
 	if err != nil || n < 0 {
-		return ReadTrailer{}
+		return 0, false
 	}
-	return ReadTrailer{NextOffset: n, HasMore: true}
+	return n, true
 }
 
 // WindowDigest binds one delivered window to its content. Two reads that

@@ -87,7 +87,13 @@ call ID 时必须用它消除歧义。`offset` 默认 0，`limit` 默认 16KiB�
 `result_ref`、实际 offset、`next_offset`、`total_bytes`、完整 SHA-256 与 `complete`，随后是
 原文页。reader 只绑定当前 Agent session，clone capability frontend 时不会继承父 reader。
 已经拥有 `use_capability` 的受限子 Agent 只能读取自己的结果；allowed-tools 配置若完全没有
-该代理，不会为了回读而扩大工具面。
+该代理，不会为了回读而扩大工具面。分页是可选的：截断或窗口读取不是主机侧债务，
+`git commit` 等未声明目标的工具或最终回答可以紧接着进行。路径级写证据仍要求先读
+被编辑的文件。
+
+`read_file` 本身按固定默认 2000 行分页（另有 8 MiB 本地安全上限）。还有后续行时，工具
+会追加 `PARTIAL view` 尾注，写明可见范围、文件总行数（超出有界预读后显示为 `N+` 下界）
+和下一次 `offset`。可见窗口够用时不必读完全文。
 
 `ask`, `docs`, `explore`, `fleet`, `forget`, `history`, `install_skill`, `install_source`,
 `list_sessions`, `lsp_definition`, `lsp_diagnostics`, `lsp_hover`,

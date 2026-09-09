@@ -193,7 +193,7 @@ func TestReadFileOffsetLimit(t *testing.T) {
 		}
 	}
 	// Trailer announces what's left so the model can paginate.
-	if !strings.Contains(out, "more line") || !strings.Contains(out, "offset=15") {
+	if !strings.Contains(out, "PARTIAL view") || !strings.Contains(out, "offset=15") {
 		t.Errorf("pagination hint missing:\n%s", out)
 	}
 }

@@ -99,24 +99,27 @@ func (a *Agent) gateReadOperation(_ context.Context, plan *toolCallPlan) (string
 
 // readContinuation owns the execution decision. Status rendering is only a
 // projection of this state; the legacy machine is used solely in rollback mode.
+//
+// A NeedsMore coverage gap is advisory: tool rounds may get a continuation
+// hint, but a final answer is not refused. Only an already-attached host Stop
+// (budget / policy stall) pauses the run.
 func (a *Agent) readContinuation(final bool) (string, error) {
-	var paused []string
-	for _, ob := range a.turn.readShadow.coord.Snapshot() {
-		if ob.State.Terminal() {
-			continue
-		}
-		if ob.Stop != nil {
-			paused = append(paused, fmt.Sprintf("%s: %s; %s", ob.Scope.CanonicalPath, ob.Stop.Detail, ob.Stop.Recovery))
-			continue
-		}
-		if final {
-			// A final answer that supplies no required content is also a stalled
-			// attempt, so ignoring the instruction cannot create an infinite loop.
-			tr, _ := a.turn.readShadow.coord.Observe(tool.ReadResultEnvelope{ReadID: ob.Key, Source: tool.ReadResultSource{CanonicalPath: ob.Scope.CanonicalPath, Snapshot: ob.Version}, Intent: ob.Requirement.Intent}, 0)
-			a.emitReadStatus(tr, tool.ReadResultEnvelope{Intent: ob.Requirement.Intent})
-			if tr.Stop != nil {
-				return "", &IncompleteReadError{Reason: tr.Stop.Detail}
+	if final {
+		var paused []string
+		for _, ob := range a.turn.readShadow.coord.Snapshot() {
+			if ob.State.Terminal() || ob.Stop == nil {
+				continue
 			}
+			paused = append(paused, fmt.Sprintf("%s: %s; %s", ob.Scope.CanonicalPath, ob.Stop.Detail, ob.Stop.Recovery))
+		}
+		if len(paused) > 0 {
+			return "", &IncompleteReadError{Reason: strings.Join(paused, "; ")}
+		}
+		return "", nil
+	}
+	for _, ob := range a.turn.readShadow.coord.Snapshot() {
+		if ob.State.Terminal() || ob.Stop != nil {
+			continue
 		}
 		a.reads.tasks.mu.Lock()
 		task := a.reads.tasks.byID[ob.Key]
@@ -124,7 +127,6 @@ func (a *Agent) readContinuation(final bool) (string, error) {
 		if !task.issued || task.snapshot == "" {
 			tr, _ := a.turn.readShadow.coord.Narrow(ob.Key, readcoord.Block{Code: "no_cursor", Detail: "no verifiable next page is available", Recovery: "inspect a narrower range and report that the full review remains incomplete"})
 			a.emitReadStatus(tr, tool.ReadResultEnvelope{Intent: ob.Requirement.Intent})
-			paused = append(paused, ob.Scope.CanonicalPath+": no verifiable next page")
 			continue
 		}
 		path := task.argumentPath
@@ -137,10 +139,7 @@ func (a *Agent) readContinuation(final bool) (string, error) {
 			prefix = "The last two pages added no content. Change strategy: use the host's exact next window instead of repeating the previous page. Call read_file "
 			delete(a.turn.readShadow.pivots, ob.Key)
 		}
-		return prefix + string(args) + ". Independent work may continue. Do not claim a complete review until this requirement is satisfied.", nil
-	}
-	if final && len(paused) > 0 {
-		return "", &IncompleteReadError{Reason: strings.Join(paused, "; ")}
+		return prefix + string(args) + ". Independent work may continue. A partial window is enough when it covers the work; do not claim a complete review until the requirement is satisfied.", nil
 	}
 	return "", nil
 }
@@ -201,13 +200,7 @@ func (a *Agent) outstandingReadEvidence(ctx context.Context, boundary uint64) []
 			s.mu.Unlock()
 		}
 	}
-	paths := s.snapshot()
-	if a.readPipelineActive() {
-		for _, ob := range a.turn.readShadow.coord.Snapshot() {
-			if !ob.State.Terminal() {
-				paths = append(paths, ob.Scope.CanonicalPath)
-			}
-		}
-	}
-	return paths
+	// Only writers already blocked for missing path evidence count here; open
+	// readcoord obligations must not freeze undeclared tools like git commit.
+	return s.snapshot()
 }

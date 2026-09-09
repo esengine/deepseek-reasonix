@@ -95,14 +95,14 @@ func (s *incompleteReadState) nextInstruction() string {
 	switch entry.phase {
 	case incompleteReadAutoResultPage, incompleteReadStrategyResultPage:
 		args, _ := json.Marshal(map[string]any{"tool_call_id": entry.toolCallID, "result_ref": entry.resultRef, "offset": entry.nextByteOffset, "limit": toolResultPageMaxBytes})
-		return fmt.Sprintf("The host has an INCOMPLETE read_file result. Before any state change or final answer, call use_capability with action=\"call\", capability_id=\"session:tool_result\", arguments=%s. Continue from each returned next_offset until complete=true.", args)
+		return fmt.Sprintf("The host retained a partial read_file result. If you need more of it, call use_capability with action=\"call\", capability_id=\"session:tool_result\", arguments=%s and continue from each returned next_offset until complete=true. Independent work may continue when the visible prefix is enough.", args)
 	case incompleteReadAutoSourcePage, incompleteReadStrategySourcePage:
 		args, _ := json.Marshal(map[string]any{"path": entry.path, "offset": entry.nextSourceOffset, "limit": entry.nextSourceLimit})
-		return fmt.Sprintf("The read_file window has more source lines. Before any state change or final answer, call read_file with exactly %s.", args)
+		return fmt.Sprintf("The read_file window has more source lines. If you need them, call read_file with exactly %s. Independent work may continue when the visible window is enough.", args)
 	case incompleteReadStrategy:
 		readExample, _ := json.Marshal(map[string]any{"path": entry.path, "offset": 0, "limit": 200})
 		receiptExample, _ := json.Marshal(map[string]any{"read_id": entry.readID, "search_tool_call_ids": []string{"<grep tool call id>"}, "read_tool_call_ids": []string{"<read_file tool call id>"}, "conclusion": "<why these searches and exact windows are sufficient for the task>"})
-		return fmt.Sprintf("The complete file cannot fit the dynamic context budget. RESTRICTED READ STRATEGY read_id=%q path=%q. Do not modify state or answer yet. Search only this exact file with grep, then read relevant windows with explicit offset and limit (example %s). After at least one complete search and one complete exact window, call use_capability with action=\"call\", capability_id=\"session:read_strategy_receipt\", arguments=%s.", entry.readID, entry.path, readExample, receiptExample)
+		return fmt.Sprintf("The complete file cannot fit the dynamic context budget. Suggested READ STRATEGY read_id=%q path=%q: search only this exact file with grep, then read relevant windows with explicit offset and limit (example %s). After at least one complete search and one complete exact window, you may call use_capability with action=\"call\", capability_id=\"session:read_strategy_receipt\", arguments=%s. Independent work may continue when the visible evidence is enough.", entry.readID, entry.path, readExample, receiptExample)
 	default:
 		return ""
 	}

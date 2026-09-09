@@ -107,8 +107,8 @@ func toolOutputRecoveryMarkerAt(toolName, toolCallID, resultRef string, original
 		Offset     int    `json:"offset"`
 	}{ToolCallID: exampleID, ResultRef: resultRef, Offset: recoverOffset})
 	return fmt.Sprintf(
-		"\n\n…[truncated tool=%s call_id=%s result_ref=%s original_bytes=%d kept_bytes=%d next_offset=%d — full original retained locally; recover with use_capability(action=\"call\", capability_id=\"session:tool_result\", arguments=%s). INCOMPLETE READ: only a contiguous prefix is visible; do not answer, modify state, or finish until recovery reaches complete=true. If use_capability is unavailable, re-run the original tool with narrower arguments]…\n\n",
-		namePart, idPart, resultRef, originalBytes, keptBytes, recoverOffset, args,
+		"\n\n…[truncated tool=%s call_id=%s result_ref=%s original_bytes=%d kept_bytes=%d next_offset=%d — full original retained locally; recover with use_capability(action=\"call\", capability_id=\"session:tool_result\", arguments=%s). Only the first %d bytes are shown; page the rest with session:tool_result if the visible part is not enough, or re-read a narrower window. If use_capability is unavailable, re-run the original tool with narrower arguments]…\n\n",
+		namePart, idPart, resultRef, originalBytes, keptBytes, recoverOffset, args, keptBytes,
 	)
 }
 

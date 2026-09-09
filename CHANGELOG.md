@@ -23,6 +23,12 @@ branch.
 
 ### Changed
 
+- **Read pagination is advisory:** Truncated / windowed `read_file` results no
+  longer freeze undeclared tools (`git commit`) or refuse a final answer.
+  Path-scoped write evidence and host Stop (budget/policy stall) remain.
+  `read_file` reports a `PARTIAL view` trailer with a bounded look-ahead total;
+  the 32 KiB recovery marker no longer instructs the model to freeze writes.
+
 - **Fact-driven execution:** Ordinary requests always enter the executor.
   There is no automatic simple / light / full task mode and no per-turn
   `TaskPolicy` classification. The planner runs only for an explicit Plan,

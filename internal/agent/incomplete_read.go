@@ -603,14 +603,12 @@ func (s *incompleteReadState) gate(plan *toolCallPlan) (string, bool) {
 	}
 
 	input := parseIncompleteReadGateInput(plan)
-	hasStrategy := false
 	for _, key := range s.order {
 		entry := s.entries[key]
 		if entry == nil {
 			continue
 		}
-		message, matched, strategy := matchIncompleteReadGateEntry(plan, input, key, entry)
-		hasStrategy = hasStrategy || strategy
+		message, matched, _ := matchIncompleteReadGateEntry(plan, input, key, entry)
 		if matched {
 			if message != "" {
 				s.roundViolation = true
@@ -618,38 +616,19 @@ func (s *incompleteReadState) gate(plan *toolCallPlan) (string, bool) {
 			return message, message != ""
 		}
 	}
-	if hasStrategy {
-		s.roundViolation = true
-		return "blocked: an oversized read_file is in restricted search/read mode. Only grep on the target file, read_file with explicit offset and limit, exact session:tool_result recovery, or session:read_strategy_receipt is allowed.", true
-	}
-	if plan.effects.StateMutation || plan.evidenceName == "complete_step" || plan.evidenceName == "submit_plan" {
-		s.roundViolation = true
-		return "blocked: read_file has unread content retained by the host. Complete the exact continuation requested in the latest host message before modifying state or finishing.", true
-	}
+	// Truncation is advisory. Exact continuation mismatches above still warn,
+	// but unpaid read pages do not freeze mutations or finals.
 	return "", false
 }
 
 func (s *incompleteReadState) blockFinal() (instruction string, pause *IncompleteReadError) {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.failure != nil {
 		copy := *s.failure
-		s.mu.Unlock()
 		return "", &copy
 	}
-	entry := s.firstLocked()
-	if entry == nil {
-		s.mu.Unlock()
-		return "", nil
-	}
-	s.consecutiveViolations++
-	violations := s.consecutiveViolations
-	if violations >= 2 {
-		err := s.pauseForEntryLocked(entry, "the model attempted to finish in two consecutive rounds without satisfying the required read strategy")
-		s.mu.Unlock()
-		return "", err
-	}
-	s.mu.Unlock()
-	return s.nextInstruction(), nil
+	return "", nil
 }
 
 func (s *incompleteReadState) pauseForEntryLocked(entry *incompleteRead, reason string) *IncompleteReadError {

@@ -23,8 +23,10 @@ build request
   guardian, and typed-report flows keep their own constraints.
 - Compaction defaults to a single summary; chunked/tree-reduce recovery is
   explicit only (manual `/compact` and marked recovery workflows).
-- Final readiness, tool safety, cancellation, budgets, and incomplete-read
-  stay as hard boundaries.
+- Final readiness, tool safety, cancellation, and budgets stay as hard
+  boundaries. `read_file` pagination / unpaid coverage is a notice; unpaid
+  pages do not freeze undeclared tools or refuse a final answer. Path-scoped
+  write evidence and host Stop (budget/policy stall) remain.
 - Old configs and old session state stay readable for one release; the new
   runtime never executes the old fallbacks.
 
@@ -74,7 +76,7 @@ New consolidated suite: `internal/agent/agent_contract_test.go`.
 | zero content retries via unified `EMPTY_RESPONSE` path | `TestRunRetriesZeroContentWithTheSameFrozenRequest` |
 | exhausted retries return an explicit protocol error | `TestRunStopsAfterExhaustedZeroContentRetriesWithoutCommittingEmptyMessages` |
 | strict-provider missing reasoning: one frozen-request retry | `TestRunSilentlyRecoversMissingToolCallReasoning` and the replay suites in `loop_e2e_test.go`/`retry_e2e_test.go` (#9776 repair) |
-| incomplete-read gate | `incomplete_read_test.go` |
+| read_file pagination notice (no write/final freeze) | `internal/boot/effect_read_file_test.go`, `incomplete_read_test.go`, `read_pipeline_regression_test.go` |
 | final readiness | `final_readiness_test.go` |
 | cancellation | `cancel_test.go` |
 | task/token/cost budgets | `run_budget_test.go` |

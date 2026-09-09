@@ -117,7 +117,16 @@ SHA-256, and `complete`, followed by the raw page. The reader is bound to the
 current Agent session and is not inherited from a parent when a capability
 frontend is cloned. A restricted child that already has `use_capability` may
 read only its own results; an allowed-tools profile without the proxy is not
-widened.
+widened. Paging is optional: a truncated or windowed result is not unpaid host
+debt, and undeclared tools such as `git commit` or a final answer may follow
+immediately. Path-scoped write evidence still requires a fresh read of the
+file being edited.
+
+`read_file` itself pages at a fixed 2000-line default (and an 8 MiB local
+safety cap). When more lines remain, the tool appends a `PARTIAL view` trailer
+naming the visible range, the file's total line count (a `N+` lower bound once
+the bounded look-ahead is exhausted), and the next `offset`. A partial window
+is sufficient when it covers the work.
 
 `ask`, `docs`, `explore`, `fleet`, `forget`, `history`, `install_skill`, `install_source`,
 `list_sessions`, `lsp_definition`, `lsp_diagnostics`, `lsp_hover`,

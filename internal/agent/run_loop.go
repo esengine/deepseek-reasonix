@@ -9,7 +9,6 @@ import (
 
 	"reasonix/internal/event"
 	"reasonix/internal/evidence"
-	"reasonix/internal/i18n"
 	"reasonix/internal/provider"
 	"reasonix/internal/runtimepolicy"
 	"reasonix/internal/tool"
@@ -367,21 +366,10 @@ func (a *Agent) handleFinalResponse(ctx context.Context, state *turnRuntime, tex
 			return true, nil
 		}
 	}
-	// A partial read is a host-owned protocol state, not advisory prose. Refuse
-	// a candidate final before every ordinary readiness/validator path so a
-	// model cannot silently answer from the visible prefix alone.
-	if instruction, pause := a.legacyReadFinal(state); pause != nil {
+	// Legacy rollback only pauses on a hard read failure, never on unpaid pages.
+	if _, pause := a.legacyReadFinal(state); pause != nil {
 		a.contextManager().ObserveUsage(usage)
 		return false, pause
-	} else if instruction != "" {
-		a.sess.conversation.Add(HostGeneratedUserMessage(a.withTurnPreferences(instruction)))
-		a.emitIncompleteReadNotice(
-			event.NoticeCodeReadContinuationRequired,
-			i18n.M.IncompleteReadFinishBlocked,
-			"final answer blocked pending read continuation",
-		)
-		a.contextManager().ObserveUsage(usage)
-		return true, nil
 	}
 	// Recovery finalization produced a summary. Keep it in the session,
 	// but still pause so Goal auto-continue cannot open another Run with

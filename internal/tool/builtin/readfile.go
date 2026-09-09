@@ -27,6 +27,7 @@ const (
 	readFileDetectSample      = 256 * 1024 // bytes sampled for encoding detection before streaming
 	readFileMaxLineBytes      = 1024 * 1024
 	readFileMaxFormattedBytes = 8 << 20
+	readFileCountBudget       = 32 * 1024 // bytes scanned past the window to size the trailer total
 )
 
 func init() { tool.RegisterBuiltin(readFile{}) }
@@ -399,8 +400,8 @@ func (r readFile) scan(src io.Reader, offset, limit int) (string, error) {
 	var collected []string
 	textBytes := 0
 	lineNo := 0
-	hasMore := false
 	safetyPaged := false
+	capped := false
 	requestedEnd := offset + limit
 	for scanner.Scan() {
 		lineNo++
@@ -415,7 +416,6 @@ func (r readFile) scan(src io.Reader, offset, limit int) (string, error) {
 			bodyBytes := textBytes + len(line) + count*(width+len("→")+1)
 			trailer := readFileSafetyTrailer(nextOffset, requestedEnd)
 			if bodyBytes+len(trailer) > readFileMaxFormattedBytes {
-				hasMore = true
 				safetyPaged = true
 				break
 			}
@@ -423,16 +423,22 @@ func (r readFile) scan(src io.Reader, offset, limit int) (string, error) {
 			textBytes += len(line)
 			continue
 		}
-		// A line past the requested window exists — stop here rather than reading
-		// the rest of the file just to count the remainder.
-		hasMore = true
+		// Size the trailer total from a bounded look-ahead: a 3-line window on
+		// a multi-GB file must not drain the file. Past the budget the total
+		// is reported as a lower bound.
+		counted := 0
+		for scanner.Scan() {
+			lineNo++
+			counted += len(scanner.Bytes()) + 1
+			if counted >= readFileCountBudget {
+				capped = true
+				break
+			}
+		}
 		break
 	}
-	if err := scanner.Err(); err != nil {
-		if strings.Contains(err.Error(), "token too long") {
-			return "", fmt.Errorf("scan: source line exceeds the 1 MiB local safety limit: %w", err)
-		}
-		return "", fmt.Errorf("scan: %w", err)
+	if err := scanReadFileError(scanner.Err()); err != nil {
+		return "", err
 	}
 
 	if lineNo == 0 {
@@ -451,12 +457,30 @@ func (r readFile) scan(src io.Reader, offset, limit int) (string, error) {
 	}
 	if safetyPaged {
 		b.WriteString(readFileSafetyTrailer(offset+len(collected), requestedEnd))
-	} else if hasMore {
-		fmt.Fprintf(&b, "\n[more lines below; pass offset=%d to continue]\n", offset+len(collected))
+	} else if maxShown < lineNo || capped {
+		fmt.Fprintf(&b, "\n[PARTIAL view: showing lines %d-%d of %s. The file continues; pass offset=%d to read on, or grep for the section you need. A partial read is fine when the visible range is sufficient.]\n",
+			offset+1, maxShown, formatReadFileTotal(lineNo, capped), offset+len(collected))
 	}
 	return b.String(), nil
 }
 
+func scanReadFileError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if strings.Contains(err.Error(), "token too long") {
+		return fmt.Errorf("scan: source line exceeds the 1 MiB local safety limit: %w", err)
+	}
+	return fmt.Errorf("scan: %w", err)
+}
+
+func formatReadFileTotal(lineNo int, capped bool) string {
+	if capped {
+		return fmt.Sprintf("%d+", lineNo)
+	}
+	return strconv.Itoa(lineNo)
+}
+
 func readFileSafetyTrailer(nextOffset, requestedEnd int) string {
-	return fmt.Sprintf("\n[read_file local safety page; next_offset=%d requested_end=%d]\n", nextOffset, requestedEnd)
+	return fmt.Sprintf("\n[read_file local safety page; next_offset=%d requested_end=%d; output capped at 8 MiB for this call]\n", nextOffset, requestedEnd)
 }

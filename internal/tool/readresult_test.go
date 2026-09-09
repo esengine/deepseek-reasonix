@@ -176,7 +176,11 @@ func TestParseReadTrailerRecognizesBothPagingForms(t *testing.T) {
 	if !more.HasMore || more.NextOffset != 7 || more.LocalSafety {
 		t.Fatalf("more-lines trailer = %+v", more)
 	}
-	safety := ParseReadTrailer("   1→a\n\n[read_file local safety page; next_offset=9 requested_end=20]\n")
+	partial := ParseReadTrailer("   1→a\n\n[PARTIAL view: showing lines 1-3 of 50. The file continues; pass offset=3 to read on, or grep for the section you need. A partial read is fine when the visible range is sufficient.]\n")
+	if !partial.HasMore || partial.NextOffset != 3 || partial.LocalSafety {
+		t.Fatalf("partial-view trailer = %+v", partial)
+	}
+	safety := ParseReadTrailer("   1→a\n\n[read_file local safety page; next_offset=9 requested_end=20; output capped at 8 MiB for this call]\n")
 	if !safety.HasMore || !safety.LocalSafety || safety.NextOffset != 9 || safety.RequestedEnd != 20 {
 		t.Fatalf("safety trailer = %+v", safety)
 	}
