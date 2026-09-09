@@ -94,6 +94,8 @@ type ProviderResponseFormat struct {
 // extension to stream. Nil Messages/Tools arrays are invalid; empty arrays
 // are the canonical form.
 type ProviderRequest struct {
+	Provider       string                  `json:"provider,omitempty"`
+	Model          string                  `json:"model,omitempty"`
 	Messages       []ProviderMessage       `json:"messages"`
 	Tools          []ProviderToolSchema    `json:"tools"`
 	Temperature    *float64                `json:"temperature,omitempty"`

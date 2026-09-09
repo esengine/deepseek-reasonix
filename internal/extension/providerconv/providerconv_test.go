@@ -31,7 +31,7 @@ func TestRequestRoundTripPreservesProviderVisibleFields(t *testing.T) {
 		ResponseFormat: &provider.ResponseFormat{Type: "json_object"},
 	}
 
-	back := RequestFromProtocol(RequestToProtocol(req))
+	back := RequestFromProtocol(RequestToProtocol(req, "test-provider", "test-model"))
 	if len(back.Messages) != len(req.Messages) || len(back.Tools) != 1 {
 		t.Fatalf("round trip = %+v", back)
 	}
@@ -54,7 +54,7 @@ func TestRequestRoundTripPreservesProviderVisibleFields(t *testing.T) {
 	if back.ResponseFormat == nil || back.ResponseFormat.Type != "json_object" {
 		t.Fatalf("response format = %+v", back.ResponseFormat)
 	}
-	if RequestFromProtocol(RequestToProtocol(provider.Request{})).ResponseFormat != nil {
+	if RequestFromProtocol(RequestToProtocol(provider.Request{}, "", "")).ResponseFormat != nil {
 		t.Fatal("nil response format must stay nil")
 	}
 }

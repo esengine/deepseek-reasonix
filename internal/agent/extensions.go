@@ -169,7 +169,7 @@ func (a *Agent) interceptProviderRequest(ctx context.Context, req provider.Reque
 	if d == nil {
 		return req, nil
 	}
-	payload := dispatch.ProviderRequestPayload{Request: providerconv.RequestToProtocol(req)}
+	payload := dispatch.ProviderRequestPayload{Request: providerconv.RequestToProtocol(req, a.svc.prov.Name(), a.modelRef)}
 	result, err := d.Intercept(ctx, extension.PointProviderRequest, &payload)
 	if err != nil {
 		return provider.Request{}, err

@@ -172,6 +172,8 @@ type CapabilityWire struct {
 type SessionContext struct {
 	SessionID     string `json:"sessionId" validate:"nonempty"`
 	WorkspaceRoot string `json:"workspaceRoot" validate:"nonempty"`
+	Provider      string `json:"provider,omitempty"`
+	Model         string `json:"model,omitempty"`
 	Generation    uint64 `json:"generation"`
 	Epoch         string `json:"epoch,omitempty"`
 }
@@ -376,6 +378,8 @@ type StreamOpenParams struct {
 
 // ProviderRequest is a generated Extension Protocol v2 wire DTO.
 type ProviderRequest struct {
+	Provider       string                  `json:"provider,omitempty"`
+	Model          string                  `json:"model,omitempty"`
 	Messages       []ProviderMessage       `json:"messages"`
 	Tools          []ProviderToolSchema    `json:"tools"`
 	Temperature    *float64                `json:"temperature,omitempty"`

@@ -179,7 +179,7 @@ func (r *Resolver) open(ctx context.Context, p *Provider, client ProviderClient,
 		ProviderRef: p.ref,
 		Model:       p.descriptor.Model,
 		Effort:      effort,
-		Request:     providerconv.RequestToProtocol(request),
+		Request:     providerconv.RequestToProtocol(request, p.ref, p.descriptor.Model),
 		SeqBase:     1,
 	})
 	cancelOpen()

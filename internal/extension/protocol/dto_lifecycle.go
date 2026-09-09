@@ -57,6 +57,8 @@ type ManifestExpectation struct {
 type SessionContext struct {
 	SessionID     string `json:"sessionId" validate:"nonempty"`
 	WorkspaceRoot string `json:"workspaceRoot" validate:"nonempty"`
+	Provider      string `json:"provider,omitempty"`
+	Model         string `json:"model,omitempty"`
 	Generation    uint64 `json:"generation"`
 	// Epoch is the dependency-identity fingerprint for this component generation.
 	Epoch string `json:"epoch,omitempty"`

@@ -362,7 +362,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		},
 	})
 	extensionMgr, err := preflightExtensionRuntimes(ctx, config.ReasonixHomeDir(), extensionBoot{
-		session:   protocol.SessionContext{SessionID: sessionID, WorkspaceRoot: root, Generation: generation},
+		session:   protocol.SessionContext{SessionID: sessionID, WorkspaceRoot: root, Provider: entry.Kind, Model: modelRef, Generation: generation},
 		ui:        extUIHub,
 		onWarning: extWarn,
 	}, opts.Extensions, planForPreflight(opts, generation))
@@ -1985,7 +1985,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 		mcpSpecs:     mcpSpecs,
 		providers:    baseResolver.Catalog(),
 	}, generation, extensionBoot{
-		session:            protocol.SessionContext{SessionID: sessionID, WorkspaceRoot: root, Generation: generation},
+		session:            protocol.SessionContext{SessionID: sessionID, WorkspaceRoot: root, Provider: entry.Kind, Model: modelRef, Generation: generation},
 		ui:                 extUIHub,
 		onWarning:          extWarn,
 		skipPromptStrategy: shouldSkipPromptStrategy(opts.PreviousPlan),
