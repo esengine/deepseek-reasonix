@@ -269,6 +269,12 @@ console.log("\nmermaid rendering");
   eq(streamingCommitTarget("para\n## Next sec"), "para\n", "a partial heading line completes the paragraph before it");
   eq(streamingCommitTarget("para\n## Done\ntail"), "para\n## Done\n", "a terminated heading promotes itself as a complete block");
 
+  // GFM table rows commit per terminated line.
+  eq(streamingCommitTarget("| a | b |\n|---|---|\n| 1 | 2 |\n"), "| a | b |\n|---|---|\n| 1 | 2 |\n", "completed table rows commit immediately");
+  eq(streamingCommitTarget("| a | b |\n|---|---|\n| 1 | 2 |"), "| a | b |\n|---|---|\n", "incomplete last row stays in tail");
+  eq(streamingCommitTarget("| a | b |\n|---|---|\n| 1 | 2 |\n\nnext"), "| a | b |\n|---|---|\n| 1 | 2 |\n\n", "blank line closes table");
+  eq(streamingCommitTarget("text\n\n| h1 | h2 |\n|---|---|\n| r1 | r1 |\n| r2 | r2 |\nmore"), "text\n\n| h1 | h2 |\n|---|---|\n| r1 | r1 |\n| r2 | r2 |\n", "table rows commit, non-pipe tail stays");
+
   const searchItem = (title: string, url: string) => `- **${title}**\n  <${url}>`;
   const searchDump = [
     searchItem("新闻本文", "https://example.com/a"),

@@ -188,6 +188,11 @@ export function streamingCommitTarget(text: string): string {
       // completes everything before it; a terminated one is itself complete.
       else if (/^ {0,3}#{1,6}[ \t]+/.test(line)) boundary = terminated ? lineEnd : lineStart;
       else if (isStreamingListItemLine(line)) boundary = lineStart;
+      // GFM table rows commit per terminated line. A row is any terminated
+      // line that contains '|'. Non-pipe lines stay in the tail because a
+      // plain line after table rows is swallowed as a single-cell row by the
+      // final remark-gfm parse.
+      else if (terminated && line.includes("|")) boundary = lineEnd;
     }
     lineStart = lineEnd;
   }
