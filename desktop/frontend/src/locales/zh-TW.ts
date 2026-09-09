@@ -3680,7 +3680,7 @@ export const zhTW: Record<DictKey, string> = {
   "context.budgetSourceOpencode": "OpenCode 元資料",
   "context.budgetSourceLearned": "400 學習",
   "context.budgetSourceUnknown": "未知",
-  "context.budgetWhyOverflow": "圓環顯示的是 prompt ÷ 視窗。prompt 只用了 63% 仍可能超窗，因為服務端會把輸出預算算進同一個視窗。",
+  "context.budgetWhyOverflow": "預算卡片顯示 prompt、輸出預算和物理剩餘空間。即使 prompt 佔用不高，服務端為輸出預留的 token 仍可能使總量超過同一個上下文視窗。",
   "context.budgetRecoveryClip": "發送前已裁剪輸出，使 prompt + 輸出能放進視窗。",
   "context.budgetRecoveryRetry": "已透過下調輸出預算從上下文 400 中恢復。",
   "context.budgetRecoveryCompacted": "已壓縮一次並重試，從上下文 400 中恢復。",
