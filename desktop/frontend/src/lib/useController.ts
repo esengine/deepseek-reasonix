@@ -3158,30 +3158,19 @@ export function useController() {
       if (historyOlderSeq.current.get(targetTabId) !== requestSeq) return false;
       const current = statesRef.current.get(targetTabId);
       if (!current) return false;
-      const currentRevision = current?.meta?.sessionRevision ?? current?.historyRevision;
-      const currentDigest = current?.meta?.sessionDigest ?? current?.historyDigest;
-      const fingerprintMatches = (expected: number | undefined, actual: number | undefined) =>
-        expected === undefined || expected <= 0 ? true : actual === expected;
-      const digestMatches = (expected: string | undefined, actual: string | undefined) =>
-        !expected || actual === expected;
-      // A replace-level hydrate while the page was in flight clears
-      // historyOlderLoading; a metadata or canonical-identity change also
-      // makes the page belong to a different transcript generation.
-      if (!current.historyOlderLoading || (current.meta?.sessionPath ?? "") !== sessionPath ||
-        !fingerprintMatches(sessionRevision, currentRevision) || !digestMatches(sessionDigest, currentDigest) ||
-        (result !== undefined && (!fingerprintMatches(sessionRevision, result.revisionKnown ? result.revision : undefined) ||
-          !digestMatches(sessionDigest, result.digest)))) {
-        dispatchTo(targetTabId, { type: "history_older_error", error: "history identity changed" });
-        return false;
-      }
+
+      // A "reload" result means the backend rewrote the session and already
+      // reloaded the latest page. Apply it (replace) BEFORE any fingerprint
+      // rejection: otherwise the reload's fresh revision/digest would trip the
+      // identity check below and the reload fallback would be dead code —
+      // surfacing "earlier conversation could not be loaded" with no recovery
+      // and a retry that repeats the same failure.
       if (!result) {
         // Superseded (generation moved) or nothing older left.
         dispatchTo(targetTabId, { type: "history_older_error", error: "history page unavailable" });
         return false;
       }
       if (result.kind === "reload") {
-        // The cursor went stale (session rewritten): the store reloaded the
-        // latest page; replace instead of prepend.
         dispatchTo(targetTabId, {
           type: "history_replace",
           items: result.items,
@@ -3191,21 +3180,42 @@ export function useController() {
           revision: result.revisionKnown ? result.revision : undefined,
           digest: result.digest || undefined,
         });
-      } else {
-        dispatchTo(targetTabId, {
-          type: "history_prepend",
-          items: result.prependItems,
-          removeIds: result.removeIds,
-          startTurn: result.startTurn,
-          totalTurns: result.totalTurns,
-          hasOlder: result.hasOlder,
-          revision: result.revisionKnown ? result.revision : undefined,
-          digest: result.digest || undefined,
-        });
+        addBreadcrumb(
+          "tab.hydrate",
+          `history older ${targetTabId} trigger=${trigger} kind=reload items=${result.items.length} turns=${result.startTurn}-${result.endTurn}/${result.totalTurns} ms=${Date.now() - startedAt}`,
+        );
+        return true;
       }
+
+      // Non-reload (prepend) page: identity must still match the tab's
+      // canonical revision/digest, or the two belong to different transcript
+      // generations (a replace-level hydrate in flight also disqualifies).
+      const currentRevision = current?.meta?.sessionRevision ?? current?.historyRevision;
+      const currentDigest = current?.meta?.sessionDigest ?? current?.historyDigest;
+      const fingerprintMatches = (expected: number | undefined, actual: number | undefined) =>
+        expected === undefined || expected <= 0 ? true : actual === expected;
+      const digestMatches = (expected: string | undefined, actual: string | undefined) =>
+        !expected || actual === expected;
+      if (!current.historyOlderLoading || (current.meta?.sessionPath ?? "") !== sessionPath ||
+        !fingerprintMatches(sessionRevision, currentRevision) || !digestMatches(sessionDigest, currentDigest) ||
+        !fingerprintMatches(sessionRevision, result.revisionKnown ? result.revision : undefined) ||
+        !digestMatches(sessionDigest, result.digest)) {
+        dispatchTo(targetTabId, { type: "history_older_error", error: "history identity changed" });
+        return false;
+      }
+      dispatchTo(targetTabId, {
+        type: "history_prepend",
+        items: result.prependItems,
+        removeIds: result.removeIds,
+        startTurn: result.startTurn,
+        totalTurns: result.totalTurns,
+        hasOlder: result.hasOlder,
+        revision: result.revisionKnown ? result.revision : undefined,
+        digest: result.digest || undefined,
+      });
       addBreadcrumb(
         "tab.hydrate",
-        `history older ${targetTabId} trigger=${trigger} kind=${result.kind} items=${result.kind === "prepend" ? result.prependItems.length : result.items.length} turns=${result.startTurn}-${result.endTurn}/${result.totalTurns} ms=${Date.now() - startedAt}`,
+        `history older ${targetTabId} trigger=${trigger} kind=prepend items=${result.prependItems.length} turns=${result.startTurn}-${result.endTurn}/${result.totalTurns} ms=${Date.now() - startedAt}`,
       );
       return true;
     } catch (err) {
