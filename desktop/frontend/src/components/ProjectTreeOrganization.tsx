@@ -407,9 +407,22 @@ export function ProjectTreeGroupRows({
           ariaLabel={t("projectTree.renameGroup")}
           onClose={() => setMenuGroup(null)}
         />}
-        {!collapsed && members.length > 0 && <div className="project-tree__group-children">
-          {members.map((child) => renderNode(child, depth, section, visible))}
-        </div>}
+        {!collapsed && members.length > 0 && (
+          <div
+            className={`project-tree__group-children${canDrop ? " project-tree__group-children--drop-target" : ""}`}
+            onDragOver={(event) => {
+              if (!canDrop) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              if (canDrop) organization.dropTopicInto(key, group.id);
+            }}
+          >
+            {members.map((child) => renderNode(child, depth, section, visible))}
+          </div>
+        )}
       </div>;
     })}
   </>;

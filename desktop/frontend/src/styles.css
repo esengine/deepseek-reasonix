@@ -31134,6 +31134,13 @@ body > .mermaid-diagram--fullscreen {
 .project-tree__group-children {
   padding-left: 0;
 }
+.project-tree__group-children--drop-target {
+  border: 1px dashed color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 6px;
+}
+.project-tree__group-children--drop-target:hover {
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
 .project-tree__folder-active-indicator {
   width: 10px;
   height: 10px;
