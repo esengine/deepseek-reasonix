@@ -3558,13 +3558,28 @@ func (a *App) renameSessionInDirIfTitleUnchanged(dir, path, expectedTitle, title
 // the legacy desktop map and live catalog/UI indexes. The session directory is
 // supplied by the owning boot so background tabs never route through whichever
 // tab happens to be active when the tool finishes.
-func (a *App) onSessionTitleChanged(dir, sessionPath, _ string) error {
+func (a *App) onSessionTitleChanged(dir, sessionPath, title string) error {
 	validated, _, err := validateSessionPath(dir, sessionPath)
 	if err != nil {
 		return err
 	}
 	if err := syncSessionTitleFromBranchMeta(dir, validated); err != nil {
 		return err
+	}
+	// Fork (#8280 residual): the project tree's authoritative topic label
+	// comes from the Topic-level titles store, which RenameSession never
+	// updated — the sidebar kept the last auto-generated name until some
+	// later catalog rebuild, and catalog state flips surfaced the new title
+	// only transiently (the "rename flash-back"). Project the manual title
+	// into the Topic-level store and live tabs so both rename entries write
+	// one visible name. Best-effort: the Session-level rename already
+	// succeeded, and a projection miss (catalog-only topic, index not built
+	// yet) must not fail the whole rename.
+	if trimmed := strings.TrimSpace(title); trimmed != "" {
+		if topicID, workspaceRoot, ok := topicIDForSessionPath(dir, validated); ok {
+			_ = setTopicTitleWithSource(workspaceRoot, topicID, trimmed, topicTitleSourceManual)
+			a.updateOpenTopicTitle(topicID, trimmed, topicTitleSourceManual)
+		}
 	}
 	a.requestSessionCatalogPath("", "", validated)
 	a.invalidatePromptHistoryCache()

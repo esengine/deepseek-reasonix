@@ -8040,6 +8040,29 @@ func topicSessionIndexHasForeignLeaseTopic(index topicSessionDirIndex, topicID s
 	return false
 }
 
+// topicIDForSessionPath reverse-maps a session file to its project-tree topic
+// (id + workspace root) using the topic-session index. ok=false when the
+// session has no indexed topic (catalog-only sessions, cleanup-pending
+// entries, or an index that failed to build).
+func topicIDForSessionPath(dir, sessionPath string) (topicID, workspaceRoot string, ok bool) {
+	index, err := topicSessionIndexForDir(dir)
+	if err != nil {
+		return "", "", false
+	}
+	sessionPath = strings.TrimSpace(sessionPath)
+	if sessionPath == "" {
+		return "", "", false
+	}
+	for id, matches := range index.byTopic {
+		for _, match := range matches {
+			if match.path == sessionPath {
+				return id, match.workspaceRoot, true
+			}
+		}
+	}
+	return "", "", false
+}
+
 func topicSessionMatches(dir, topicID string) []topicSessionMatch {
 	index, err := topicSessionIndexForDir(dir)
 	if err != nil {
