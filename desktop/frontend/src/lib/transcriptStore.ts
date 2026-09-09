@@ -58,6 +58,9 @@ export interface TranscriptBackend {
   HistoryContentForTab(tabID: string, ref: HistoryContentRef, chunkIndex: number): Promise<HistoryContentChunk>;
 }
 
+/** Grace window after a tab stops being active before its sessions become eviction candidates. */
+const DEFAULT_EVICT_COOLDOWN_MS = 5 * 60_000;
+
 export interface TranscriptStoreOptions {
   /** Resident sessions with records (unpinned). Default 3. */
   maxResidentSessions?: number;
@@ -65,6 +68,13 @@ export interface TranscriptStoreOptions {
   historyBodyBudgetBytes?: number;
   /** Parsed-markdown cache budget. Default 16MiB. */
   markdownBudgetBytes?: number;
+  /**
+   * Grace window (ms) after a tab stops being the active tab before its
+   * sessions may be evicted. Guards the "switch to a busy tab, switch back,
+   * scroll up" flow: without it the freshly left session is the first FIFO
+   * victim and its scroll anchor is lost mid-browse. Default 5 minutes.
+   */
+  evictCooldownMs?: number;
 }
 
 export interface TranscriptProjection {
@@ -378,12 +388,15 @@ export class TranscriptStore {
   private readonly listeners = new Map<string, Set<(change: TranscriptContentChange) => void>>();
   private readonly markdown: TranscriptMarkdownCache;
   private historyEvictions = 0;
+  private readonly evictCooldownMs: number;
+  private readonly lastActiveAt = new Map<string, number>();
 
   constructor(backend: TranscriptBackend, options: TranscriptStoreOptions = {}) {
     this.backend = backend;
     this.maxResidentSessions = Math.max(1, options.maxResidentSessions ?? DEFAULT_MAX_RESIDENT_SESSIONS);
     this.historyBodyBudgetBytes = Math.max(0, options.historyBodyBudgetBytes ?? DEFAULT_HISTORY_BODY_BUDGET);
     this.markdown = new TranscriptMarkdownCache(Math.max(0, options.markdownBudgetBytes ?? DEFAULT_MARKDOWN_BUDGET));
+    this.evictCooldownMs = Math.max(0, options.evictCooldownMs ?? DEFAULT_EVICT_COOLDOWN_MS);
   }
 
   // ── session identity / LRU ────────────────────────────────────────────────
@@ -445,7 +458,13 @@ export class TranscriptStore {
   noteActiveTab(tabId: string | undefined, previousTabId?: string): void {
     if (previousTabId && previousTabId !== tabId) {
       const pins = this.tabPins.get(previousTabId) ?? { live: false, active: false };
-      if (pins.active) this.tabPins.set(previousTabId, { ...pins, active: false });
+      if (pins.active) {
+        this.tabPins.set(previousTabId, { ...pins, active: false });
+        // Start the eviction cooldown for the freshly deactivated tab: its
+        // scroll anchor is still live in the composer/transcript and the user
+        // may switch right back (see evictable()'s cooldown filter).
+        this.lastActiveAt.set(previousTabId, Date.now());
+      }
     }
     if (tabId) {
       const pins = this.tabPins.get(tabId) ?? { live: false, active: false };
@@ -459,6 +478,7 @@ export class TranscriptStore {
       if (session.tabId === tabId) this.sessions.delete(key);
     }
     this.tabPins.delete(tabId);
+    this.lastActiveAt.delete(tabId);
   }
 
   private evictSession(session: SessionTranscript): void {
@@ -468,8 +488,17 @@ export class TranscriptStore {
   }
 
   private enforceBudgets(): void {
+    const now = Date.now();
     const evictable = (): SessionTranscript[] =>
-      Array.from(this.sessions.values()).filter((s) => s.records.length > 0 && !this.isPinned(s));
+      Array.from(this.sessions.values()).filter(
+        (s) =>
+          s.records.length > 0 &&
+          !this.isPinned(s) &&
+          // Eviction cooldown: a tab that just stopped being active keeps its
+          // scroll anchor live for a grace window — the user may switch right
+          // back and scroll (see noteActiveTab's lastActiveAt stamp).
+          now - (this.lastActiveAt.get(s.tabId) ?? 0) >= this.evictCooldownMs,
+      );
     let candidates = evictable();
     let resident = candidates.length;
     while (resident > this.maxResidentSessions && candidates.length > 0) {
@@ -684,6 +713,10 @@ export class TranscriptStore {
     const session = this.sessions.get(sessionKeyFor(tabId, sessionPath));
     if (!session || session.records.length === 0) return [];
     const items = this.appendRecords(session, entries);
+    // A live-append refreshes the LRU position too: a busy session whose tab
+    // was just deactivated must not be the first FIFO eviction victim while
+    // its stream is still delivering.
+    this.touch(session);
     this.enforceBudgets();
     return items;
   }
