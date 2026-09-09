@@ -77,17 +77,36 @@ func acquireTopicArchiveOwnership(targets []topicTrashTarget, removed []removedS
 		}
 		lease := takeTopicArchiveSessionLease(tab, target.sessionPath)
 		if lease == nil {
-			batch.rollback()
-			return nil, errTopicArchiveBusy
+			// No lease available (e.g. tab in sessionRuntimeFailed after
+			// a failed restore). Fall back to non-runtime guard acquisition
+			// so the archive can proceed without a live lease.
+			guard, err := acquireSessionRemovalGuard(target.sessionPath)
+			if err != nil {
+				batch.rollback()
+				return nil, err
+			}
+			batch.add(target, guard, nil)
+			continue
 		}
 		guard, err := lease.TryConvertToRemovalGuard()
 		if err != nil {
+			// Lease conversion failed (stale authority, mismatched generation,
+			// etc.). Release the lease and fall back to a non-runtime guard
+			// instead of aborting the entire archive.
 			tab.adoptSessionLease(lease)
-			batch.rollback()
 			if errors.Is(err, agent.ErrSessionLeaseHeld) {
+				batch.rollback()
 				return nil, errSessionBusyElsewhere
 			}
-			return nil, err
+			slog.Warn("desktop: topic archive lease conversion failed, falling back to non-runtime guard",
+				"session", target.sessionPath, "err", err)
+			guard2, err2 := acquireSessionRemovalGuard(target.sessionPath)
+			if err2 != nil {
+				batch.rollback()
+				return nil, err2
+			}
+			batch.add(target, guard2, nil)
+			continue
 		}
 		batch.add(target, guard, tab)
 	}
