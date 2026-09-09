@@ -122,7 +122,7 @@ func (a *Agent) buildSamplingRequest(ctx context.Context, trigger string) (sampl
 		MaxTokens:      a.maxOutputTokens,
 		Temperature:    provider.OptionalTemperature(a.temperature),
 		ResponseFormat: responseFormatFromRequest(ctx),
-		EffortOverride: a.governorOverride(),
+		EffortOverride: a.effortOverrideForRequest(),
 	}
 	if provider.NativeToolSearchEnabled(a.svc.prov) {
 		req.ToolSearch = &provider.ToolSearch{Enabled: true}

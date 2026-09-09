@@ -979,6 +979,17 @@ func (c *Controller) recordDisplayForNewUser(startMessages int, display string) 
 	}
 }
 
+// SetSessionEffortOverride applies a session-scoped reasoning-depth override
+// to the running agent (no rebuild) and reports whether the provider honors
+// per-request depth; false means the caller must fall back to the rebuild
+// path instead of writing an override the endpoint would ignore.
+func (c *Controller) SetSessionEffortOverride(level string) bool {
+	if c.executor == nil {
+		return false
+	}
+	return c.executor.SetSessionEffortOverride(level)
+}
+
 func (c *Controller) markEditedForNewUser(startMessages int, original string) {
 	if strings.TrimSpace(original) == "" || c.executor == nil {
 		return

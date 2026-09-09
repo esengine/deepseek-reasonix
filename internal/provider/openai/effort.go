@@ -62,3 +62,10 @@ func hasExplicitSupportedEfforts(levels []string) bool {
 	}
 	return false
 }
+
+// PerRequestEfforts reports the depth levels a request-scoped EffortOverride
+// may take on this endpoint (see requestEffort). Nil or empty means the
+// endpoint cannot vary depth per request, so frontends that fix effort at
+// boot must keep using the configured depth (or rebuild the runtime) instead
+// of writing a per-request override that would silently degrade on the wire.
+func (c *client) PerRequestEfforts() []string { return c.requestEfforts }

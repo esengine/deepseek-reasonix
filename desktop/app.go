@@ -9832,6 +9832,26 @@ func (a *App) SetEffortForTab(tabID, level string) error {
 	defer a.runtimeRebuildMu.Unlock()
 	tab.turnStartMu.Lock()
 	defer tab.turnStartMu.Unlock()
+	// Per-request fast path: providers whose effort vocabulary is request-
+	// scoped (provider.Request.EffortOverride) take the new depth on the next
+	// call, so switching costs no rebuild at all. Providers that cannot vary
+	// depth per request return false here and fall through to the build+swap
+	// path below, which keeps re-anchoring semantics (recovery branches,
+	// snapshot) identical to the model switch.
+	if ctrl := a.controllerForTab(tab); ctrl != nil {
+		if entry, err := a.currentProviderEntryForTab(tabID); err == nil {
+			if effort, err := config.NormalizeEffort(entry, level); err == nil {
+				if setter, ok := ctrl.(interface {
+					SetSessionEffortOverride(string) bool
+				}); ok && setter.SetSessionEffortOverride(effort) {
+					a.mu.Lock()
+					tab.effort = &effort
+					a.mu.Unlock()
+					return nil
+				}
+			}
+		}
+	}
 	prevPath := a.reconciledSessionPathForTab(tab)
 	if prevPath == "" {
 		prevPath = a.currentSessionPathFor(tab)
