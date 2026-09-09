@@ -220,6 +220,10 @@ func (c *Controller) RegisterExternalFolderRef(path string) (token, displayPath 
 	if c.externalFolderToolRefs != nil {
 		c.externalFolderToolRefs.RegisterReadRoot(token, abs)
 	}
+	// Also grant write access so the agent can edit files in the external folder.
+	if c.writeAccess.roots != nil {
+		c.writeAccess.roots.GrantVerifiedSession([]string{abs})
+	}
 	return token, filepath.ToSlash(abs), nil
 }
 

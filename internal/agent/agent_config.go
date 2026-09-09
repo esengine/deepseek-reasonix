@@ -22,6 +22,10 @@ type agentConfig struct {
 	classifierTaskText string
 	// writeWorkspaceRoot scopes write reservations when writeScheduler is set.
 	writeWorkspaceRoot string
+	// externalWorkspaceRoots are user-attached directories outside the main
+	// workspace that the agent may write to. They extend the write scope
+	// without changing the primary workspace identity.
+	externalWorkspaceRoots []string
 	// subagentDepth caps delegation; at maxSubagentDepth the recursive
 	// agent/skill tools are excluded.
 	subagentDepth    int

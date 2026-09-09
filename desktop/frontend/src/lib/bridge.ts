@@ -517,6 +517,7 @@ export interface AppBindings extends ModelSettingsBindings, SessionCatalogBindin
   SaveExportFile(path: string, payload: string, base64Encoded: boolean): Promise<void>;
   SaveExportImageFiles(path: string, payloads: string[]): Promise<void>;
   AttachDropped(path: string): Promise<DroppedItem>;
+  AttachExternalFolder(): Promise<string>;
   AttachmentDataURL(path: string): Promise<string>;
   Models(): Promise<ModelInfo[]>;
   SetModel(name: string): Promise<void>;
@@ -4305,6 +4306,9 @@ function makeMockApp(): AppBindings {
       const attachmentPath = `.reasonix/attachments/mock-${name}`;
       mockAttachmentDataURLs.set(attachmentPath, mockPreviewImageDataURL);
       return { kind: "attachment" as const, path: attachmentPath };
+    },
+    async AttachExternalFolder() {
+      return "/mock/external-folder";
     },
     async AttachmentDataURL(path: string) {
       return mockAttachmentDataURLs.get(path) ?? mockPreviewImageDataURL;

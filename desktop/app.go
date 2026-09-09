@@ -10990,6 +10990,34 @@ func (a *App) AttachDropped(path string) (DroppedItem, error) {
 	return item, nil
 }
 
+// AttachExternalFolder opens a native folder picker and grants the selected
+// directory read+write access for the current session. Returns the display
+// path of the attached folder, or empty if the user cancelled.
+func (a *App) AttachExternalFolder() (string, error) {
+	tab, ctrl := a.tabAndCtrlByID("")
+	if err := a.ensureTabControllerWorkspace(tab); err != nil {
+		return "", err
+	}
+	if tab != nil {
+		ctrl = a.controllerForTab(tab)
+	}
+	if ctrl == nil {
+		return "", fmt.Errorf("workspace is not ready")
+	}
+	dir, err := a.PickWorkspace()
+	if err != nil {
+		return "", err
+	}
+	if dir == "" {
+		return "", nil
+	}
+	_, displayPath, err := ctrl.RegisterExternalFolderRef(dir)
+	if err != nil {
+		return "", err
+	}
+	return displayPath, nil
+}
+
 func isImageExt(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".png", ".jpg", ".jpeg", ".gif", ".webp":
