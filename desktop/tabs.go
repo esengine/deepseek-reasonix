@@ -1695,8 +1695,14 @@ func (e *asyncRuntimeEmitter) run() {
 
 func topicActivityStatusFromEvent(e event.Event) (string, bool) {
 	switch e.Kind {
-	case event.TurnStarted, event.Reasoning, event.ToolDispatch, event.ToolProgress, event.ToolResultPreview, event.ToolResult, event.CompactionStarted, event.CompactionDone, event.Retrying:
+	case event.TurnStarted, event.Reasoning, event.ToolDispatch, event.ToolProgress, event.ToolResultPreview, event.ToolResult, event.CompactionStarted, event.Retrying:
 		return topicStatusThinking, true
+	// CompactionDone is an ending state: the pass finished (successfully or was
+	// aborted). Reset the topic to idle instead of leaving it in "thinking",
+	// which would otherwise stay until a later TurnDone (manual /compact turns
+	// don't always fire one) — #9230.
+	case event.CompactionDone:
+		return "", true
 	case event.Text, event.Message:
 		return topicStatusStreaming, true
 	case event.ApprovalRequest, event.AskRequest:
