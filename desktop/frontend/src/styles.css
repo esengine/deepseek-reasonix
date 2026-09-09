@@ -5363,6 +5363,19 @@ button.reasoning-summary:focus-visible {
 .md p {
   margin: 0 0 12px;
 }
+/* #9225: block (display) math must keep enough vertical line-height and not be
+   clipped by the container, so multi-line \substack / \underbrace rows do not
+   overlap. KaTeX itself renders the full structure (verified via
+   renderToString), so this is a container-style guard. */
+.md .katex-display {
+  line-height: 1.6;
+  overflow: visible;
+  margin: 12px 0;
+}
+.md .katex-display > .katex,
+.md .katex-display > .katex > .katex-html {
+  line-height: 1.6;
+}
 .md h1,
 .md h2,
 .md h3,
