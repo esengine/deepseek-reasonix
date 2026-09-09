@@ -2,9 +2,38 @@ package main
 
 import (
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
+
+func TestWindowsVisualStudioDevenvCandidatesParseVSWhereOutput(t *testing.T) {
+	install := filepath.Join(`C:\Program Files`, "Microsoft Visual Studio", "2026", "Professional")
+	preview := filepath.Join(`D:\Apps`, "Microsoft Visual Studio", "2022", "Preview")
+	got := windowsVisualStudioDevenvCandidates("\ufeff\"" + install + "\"\r\n\r\n" + preview + "\n")
+	want := []string{
+		filepath.Join(install, "Common7", "IDE", "devenv.exe"),
+		filepath.Join(preview, "Common7", "IDE", "devenv.exe"),
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("devenv candidates = %v, want %v", got, want)
+	}
+}
+
+func TestWindowsVisualStudioFallbackCandidatesPreferNewestVersion(t *testing.T) {
+	programFiles := filepath.Join("C:", "Program Files")
+	programFilesX86 := filepath.Join("C:", "Program Files (x86)")
+	got := windowsVisualStudioFallbackCandidatePaths(programFiles, programFilesX86)
+	want := []string{
+		filepath.Join(programFiles, "Microsoft Visual Studio", "2026", "*", "Common7", "IDE", "devenv.exe"),
+		filepath.Join(programFilesX86, "Microsoft Visual Studio", "2026", "*", "Common7", "IDE", "devenv.exe"),
+		filepath.Join(programFiles, "Microsoft Visual Studio", "2022", "*", "Common7", "IDE", "devenv.exe"),
+		filepath.Join(programFilesX86, "Microsoft Visual Studio", "2022", "*", "Common7", "IDE", "devenv.exe"),
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("fallback candidates = %v, want %v", got, want)
+	}
+}
 
 func TestWindowsTerminalIconCandidatePathsPreferPackageBinary(t *testing.T) {
 	// Use fixed Windows-style roots so the assertion is OS-independent; helpers

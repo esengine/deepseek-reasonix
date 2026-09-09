@@ -5,6 +5,44 @@ import (
 	"strings"
 )
 
+// windowsVisualStudioDevenvCandidates converts vswhere installationPath output
+// into ordered devenv.exe paths. vswhere -latest normally returns one line, but
+// accepting multiple non-empty lines keeps the parser resilient to wrappers and
+// makes the first valid installation win deterministically.
+func windowsVisualStudioDevenvCandidates(vswhereOutput string) []string {
+	var out []string
+	for _, line := range strings.Split(strings.ReplaceAll(vswhereOutput, "\r\n", "\n"), "\n") {
+		installPath := strings.TrimPrefix(strings.TrimSpace(line), "\ufeff")
+		installPath = strings.Trim(strings.TrimSpace(installPath), `"`)
+		if installPath == "" {
+			continue
+		}
+		out = append(out, filepath.Join(installPath, "Common7", "IDE", "devenv.exe"))
+	}
+	return out
+}
+
+// windowsVisualStudioFallbackCandidatePaths returns standard Visual Studio
+// install globs in newest-version-first order. Visual Studio 2022 (17.x) and
+// 2026 (18.x) are 64-bit applications, but the x86 root remains a compatibility
+// fallback for customized or upgraded installations.
+func windowsVisualStudioFallbackCandidatePaths(programFiles, programFilesX86 string) []string {
+	var roots []string
+	for _, root := range []string{programFiles, programFilesX86} {
+		root = strings.TrimSpace(root)
+		if root != "" {
+			roots = append(roots, root)
+		}
+	}
+	var out []string
+	for _, version := range []string{"2026", "2022"} {
+		for _, root := range roots {
+			out = append(out, filepath.Join(root, "Microsoft Visual Studio", version, "*", "Common7", "IDE", "devenv.exe"))
+		}
+	}
+	return out
+}
+
 // windowsTerminalIconCandidatePaths returns ordered icon lookup paths for
 // Windows Terminal. Store installs register only a wt.exe App Execution Alias
 // under LocalAppData\Microsoft\WindowsApps; the real WindowsTerminal.exe lives

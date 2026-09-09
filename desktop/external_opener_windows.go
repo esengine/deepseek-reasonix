@@ -3,10 +3,12 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -21,6 +23,7 @@ const (
 	dibRGBColors           = 0
 	drawIconNormal         = 0x0003
 	windowsOpenerIconWidth = 32
+	windowsVSWhereTimeout  = 2 * time.Second
 )
 
 type windowsShellFileInfo struct {
@@ -82,6 +85,10 @@ func firstWindowsExecutable(names []string, candidates ...string) string {
 			return path
 		}
 	}
+	return firstWindowsExistingFile(candidates...)
+}
+
+func firstWindowsExistingFile(candidates ...string) string {
 	for _, candidate := range candidates {
 		if candidate == "" {
 			continue
@@ -95,6 +102,42 @@ func firstWindowsExecutable(names []string, candidates ...string) string {
 		}
 	}
 	return ""
+}
+
+func queryWindowsVSWhere(vswherePath string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), windowsVSWhereTimeout)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, vswherePath,
+		"-latest", "-products", "*", "-property", "installationPath", "-utf8").Output()
+	if err != nil {
+		return "", err
+	}
+	return string(output), nil
+}
+
+func findWindowsVisualStudioExecutable(programFiles, programFilesX86 string, queryVSWhere func(string) (string, error)) string {
+	vswhere := firstWindowsExistingFile(
+		joinWindowsInstallPath(programFilesX86, "Microsoft Visual Studio", "Installer", "vswhere.exe"),
+		joinWindowsInstallPath(programFiles, "Microsoft Visual Studio", "Installer", "vswhere.exe"),
+	)
+	if vswhere == "" {
+		vswhere = firstWindowsExecutable([]string{"vswhere.exe"})
+	}
+	if vswhere != "" && queryVSWhere != nil {
+		if output, err := queryVSWhere(vswhere); err == nil {
+			if path := firstWindowsExistingFile(windowsVisualStudioDevenvCandidates(output)...); path != "" {
+				return path
+			}
+		}
+	}
+	if path := firstWindowsExistingFile(windowsVisualStudioFallbackCandidatePaths(programFiles, programFilesX86)...); path != "" {
+		return path
+	}
+	return firstWindowsExecutable([]string{"devenv.exe"})
+}
+
+func windowsVisualStudioExecutable(programFiles, programFilesX86 string) string {
+	return findWindowsVisualStudioExecutable(programFiles, programFilesX86, queryWindowsVSWhere)
 }
 
 // windowsAppPathExecutable resolves an install registered under
@@ -224,6 +267,14 @@ func platformExternalOpenerSpecs() []externalOpenerSpec {
 		joinWindowsInstallPath(programFilesX86, "Microsoft VS Code", "Code.exe"))
 	add("vscode-insiders", "VS Code Insiders", externalOpenerEditor, "path", []string{"Code - Insiders.exe"},
 		joinWindowsInstallPath(local, "Programs", "Microsoft VS Code Insiders", "Code - Insiders.exe"))
+	if path := windowsVisualStudioExecutable(programFiles, programFilesX86); path != "" {
+		specs = append(specs, externalOpenerSpec{
+			View:       ExternalOpenerView{ID: "visual-studio", Name: "Visual Studio", Kind: externalOpenerEditor},
+			Target:     path,
+			LaunchMode: "path",
+			IconSource: path,
+		})
+	}
 	add("cursor", "Cursor", externalOpenerEditor, "path", []string{"Cursor.exe"},
 		joinWindowsInstallPath(local, "Programs", "cursor", "Cursor.exe"),
 		joinWindowsInstallPath(programFiles, "Cursor", "Cursor.exe"))

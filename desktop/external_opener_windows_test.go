@@ -3,11 +3,57 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestFindWindowsVisualStudioExecutablePrefersVSWhere(t *testing.T) {
+	programFiles := filepath.Join(t.TempDir(), "Program Files")
+	programFilesX86 := filepath.Join(t.TempDir(), "Program Files (x86)")
+	vswhere := filepath.Join(programFilesX86, "Microsoft Visual Studio", "Installer", "vswhere.exe")
+	install := filepath.Join(t.TempDir(), "Microsoft Visual Studio", "2026", "Professional")
+	devenv := filepath.Join(install, "Common7", "IDE", "devenv.exe")
+	for _, path := range []string{vswhere, devenv} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("test"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got := findWindowsVisualStudioExecutable(programFiles, programFilesX86, func(path string) (string, error) {
+		if path != vswhere {
+			t.Fatalf("vswhere path = %q, want %q", path, vswhere)
+		}
+		return install + "\r\n", nil
+	})
+	if got != devenv {
+		t.Fatalf("Visual Studio executable = %q, want vswhere result %q", got, devenv)
+	}
+}
+
+func TestFindWindowsVisualStudioExecutableFallsBackToStandardPaths(t *testing.T) {
+	programFiles := filepath.Join(t.TempDir(), "Program Files")
+	programFilesX86 := filepath.Join(t.TempDir(), "Program Files (x86)")
+	devenv := filepath.Join(programFiles, "Microsoft Visual Studio", "2026", "Community", "Common7", "IDE", "devenv.exe")
+	if err := os.MkdirAll(filepath.Dir(devenv), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(devenv, []byte("test"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := findWindowsVisualStudioExecutable(programFiles, programFilesX86, func(string) (string, error) {
+		return "", errors.New("vswhere unavailable")
+	})
+	if got != devenv {
+		t.Fatalf("Visual Studio executable = %q, want standard-path result %q", got, devenv)
+	}
+}
 
 func TestWindowsExternalOpenerIconUsesShellIcon(t *testing.T) {
 	explorer := filepath.Join(os.Getenv("WINDIR"), "explorer.exe")
