@@ -175,20 +175,21 @@ func MCPServerEntries(opts CatalogOptions) []Entry {
 		out = append(out, e)
 
 		// Surface concrete tools that are not on the provider-visible registry:
-		// live proxy-observed tools once the server is connected (proxied
-		// servers never register), cached schema before any connection exists.
-		registryHasTools := false
+		// live proxy-observed tools once the server is connected, cached schema
+		// before any connection exists. Pinned cache-hit registrations can lag
+		// the live server, so registry presence only suppresses per-tool
+		// duplicates, never the whole live directory.
+		registered := map[string]bool{}
 		prefix := plugin.ToolPrefix(name)
 		for _, te := range opts.Tools {
 			if strings.HasPrefix(te.Name, prefix) {
-				registryHasTools = true
-				break
+				registered[te.Name] = true
 			}
 		}
 		var toolSrc []plugin.CachedTool
 		toolStatus := StatusConfigured
 		switch {
-		case status == StatusReady && len(opts.ProxyTools[name]) > 0 && !registryHasTools:
+		case status == StatusReady && len(opts.ProxyTools[name]) > 0:
 			toolSrc = opts.ProxyTools[name]
 			toolStatus = StatusReady
 		case status != StatusReady:
@@ -202,6 +203,9 @@ func MCPServerEntries(opts CatalogOptions) []Entry {
 			raw := strings.TrimSpace(ct.Name)
 			if raw == "" || !ct.ToolIsModelVisible() {
 				// App-only tools stay in the server-private App catalog.
+				continue
+			}
+			if toolStatus == StatusReady && registered[plugin.ModelToolName(name, raw)] {
 				continue
 			}
 			out = append(out, Entry{
