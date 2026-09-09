@@ -351,6 +351,11 @@ export function ProjectTreeGroupRows({
     {children.filter((child) => !groupedIDs.has(child.topicId ?? "")).map((child) => renderNode(child, depth, section, visible))}
     {groups.map((group) => {
       const collapsed = organization.groupCollapsed(key, group.id);
+      // The count badge reads the persisted roster (already filtered against
+      // the session catalog by the backend), not the windowed render list —
+      // collapsed groups render no member rows, so the badge is the only
+      // signal and must not shrink with classic preview / pagination (#9518).
+      const memberCount = group.topicIds?.length ?? 0;
       const members = children.filter((child) => group.topicIds?.includes(child.topicId ?? ""));
       const canDrop = organization.canDropTopicInto(key);
       return <div key={group.id} className={`project-tree__group${collapsed ? " project-tree__group--collapsed" : ""}`}>
@@ -394,7 +399,7 @@ export function ProjectTreeGroupRows({
             onBlur={() => commitRename(group.id)}
             onClick={(event) => event.stopPropagation()}
           /> : <span className="project-tree__group-title">{group.title}</span>}
-          <span className="project-tree__group-count">{members.length}</span>
+          <span className="project-tree__group-count">{memberCount}</span>
         </div>
         {menuGroup === group.id && <ContextMenu
           open

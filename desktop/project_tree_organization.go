@@ -217,13 +217,67 @@ func (a *App) ListProjectGroups(scope, workspaceRoot string) ([]desktopGroup, er
 	}
 	f := loadProjectsFile()
 	if scope == "global" {
-		return nonNilGroups(f.GlobalGroups), nil
+		return a.filterKnownGroupMembers(nonNilGroups(f.GlobalGroups)), nil
 	}
 	i := projectIndexByRoot(f.Projects, workspaceRoot)
 	if i < 0 {
 		return []desktopGroup{}, nil
 	}
-	return nonNilGroups(f.Projects[i].Groups), nil
+	return a.filterKnownGroupMembers(nonNilGroups(f.Projects[i].Groups)), nil
+}
+
+// filterKnownGroupMembers drops group member ids that no longer resolve to a
+// live catalog topic (#9518). The project tree counts persisted topicIds, so
+// stale ids (deleted sessions, tombstoned topics) inflate collapsed-group
+// counts. The catalog is authoritative and cross-page; when it is not ready —
+// or the membership lookup fails — groups are returned untouched, matching the
+// pre-filter behavior instead of hiding valid members.
+func (a *App) filterKnownGroupMembers(groups []desktopGroup) []desktopGroup {
+	var ids []string
+	for _, group := range groups {
+		ids = append(ids, group.TopicIDs...)
+	}
+	if len(ids) == 0 {
+		return groups
+	}
+	catalog := a.sessionCatalog.Load()
+	if catalog == nil {
+		return groups
+	}
+	ctx, cancel := a.catalogReadContext()
+	defer cancel()
+	known, err := catalog.KnownTopicIDs(ctx, ids)
+	if err != nil {
+		return groups
+	}
+	changed := false
+	out := make([]desktopGroup, len(groups))
+	for i, group := range groups {
+		if len(group.TopicIDs) == 0 {
+			out[i] = group
+			continue
+		}
+		filtered := make([]string, 0, len(group.TopicIDs))
+		groupChanged := false
+		for _, id := range group.TopicIDs {
+			if known[id] {
+				filtered = append(filtered, id)
+			} else {
+				groupChanged = true
+			}
+		}
+		if !groupChanged {
+			out[i] = group
+			continue
+		}
+		changed = true
+		group.TopicIDs = filtered
+		out[i] = group
+	}
+	if !changed {
+		return groups
+	}
+	return out
 }
 
 func nonNilGroups(groups []desktopGroup) []desktopGroup {
@@ -243,13 +297,13 @@ func (a *App) GetProjectGroups(scope, workspaceRoot string) (ProjectGroupsSnapsh
 	}
 	f := loadProjectsFile()
 	if scope == "global" {
-		return ProjectGroupsSnapshot{Groups: nonNilGroups(f.GlobalGroups), Revision: f.GlobalGroupsRevision, Applied: true}, nil
+		return ProjectGroupsSnapshot{Groups: a.filterKnownGroupMembers(nonNilGroups(f.GlobalGroups)), Revision: f.GlobalGroupsRevision, Applied: true}, nil
 	}
 	i := projectIndexByRoot(f.Projects, workspaceRoot)
 	if i < 0 {
 		return ProjectGroupsSnapshot{Groups: []desktopGroup{}, Applied: true}, nil
 	}
-	return ProjectGroupsSnapshot{Groups: nonNilGroups(f.Projects[i].Groups), Revision: f.Projects[i].GroupsRevision, Applied: true}, nil
+	return ProjectGroupsSnapshot{Groups: a.filterKnownGroupMembers(nonNilGroups(f.Projects[i].Groups)), Revision: f.Projects[i].GroupsRevision, Applied: true}, nil
 }
 
 func (a *App) SaveSessionGroups(scope, workspaceRoot string, groups []desktopGroup) error {

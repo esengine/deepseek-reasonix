@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"reasonix/internal/agent"
 )
 
 func TestCompleteTopicOrderPreservesTopicsMissingFromPartialClient(t *testing.T) {
@@ -225,5 +227,57 @@ func TestListProjectGroupsMissingProjectReturnsJSONArray(t *testing.T) {
 	}
 	if string(b) != "[]" {
 		t.Fatalf("missing project groups JSON = %s, want []", b)
+	}
+}
+
+func TestGetProjectGroupsFiltersStaleMemberIDs(t *testing.T) {
+	isolateDesktopUserDirs(t)
+	root := t.TempDir()
+	if err := addProject(root, "Grouped"); err != nil {
+		t.Fatal(err)
+	}
+	sessionDir := desktopSessionDir(root)
+	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	livePath := filepath.Join(sessionDir, "live.jsonl")
+	if err := os.WriteFile(livePath, []byte(`{"role":"user","content":"hi"}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := agent.UpdateBranchMeta(livePath, false, func(meta *agent.BranchMeta) error {
+		meta.TopicID = "topic-live"
+		meta.TopicTitle = "Live Topic"
+		meta.WorkspaceRoot = root
+		meta.Scope = "project"
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp()
+	installSessionCatalogForTest(t, app, sessionDir, "project", root)
+
+	groups := []desktopGroup{
+		{ID: "g1", Title: "Live", TopicIDs: []string{"topic-live", "topic-gone", "topic-archived"}},
+		{ID: "g2", Title: "Empty", TopicIDs: nil},
+	}
+	if err := app.SaveSessionGroups("project", root, groups); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := app.GetProjectGroups("project", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Groups) != 2 {
+		t.Fatalf("groups = %d, want 2 (empty groups stay)", len(snapshot.Groups))
+	}
+	if want := []string{"topic-live"}; !reflect.DeepEqual(snapshot.Groups[0].TopicIDs, want) {
+		t.Fatalf("live group members = %v, want %v", snapshot.Groups[0].TopicIDs, want)
+	}
+	listed, err := app.ListProjectGroups("project", root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"topic-live"}; !reflect.DeepEqual(listed[0].TopicIDs, want) {
+		t.Fatalf("listed live group members = %v, want %v", listed[0].TopicIDs, want)
 	}
 }
