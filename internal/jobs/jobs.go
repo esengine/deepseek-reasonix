@@ -123,19 +123,14 @@ type Job struct {
 	Label     string
 	SessionID string
 
-	mu          sync.Mutex
-	tail        []byte
-	readOffset  int64
-	status      Status
-	result      string
-	resultRead  bool // result already surfaced by Output (task jobs stream nothing to buf)
-	startedAt   int64
-	finishedAt  int64
-	activityAt  int64
-	runReturned bool
-	cancel      context.CancelFunc
-	done        chan struct{}
-	stalled     bool
+	mu         sync.Mutex
+	tail       []byte
+	readOffset int64
+	status     Status
+	clock      jobClock
+	outcome    jobOutcome
+	cancel     context.CancelFunc
+	done       chan struct{}
 
 	artifactPath     string
 	artifactMetaPath string
@@ -326,7 +321,7 @@ type jobWriter struct{ j *Job }
 func (w jobWriter) Write(p []byte) (int, error) {
 	w.j.mu.Lock()
 	defer w.j.mu.Unlock()
-	w.j.activityAt = nowMs()
+	w.j.clock.activityAt = nowMs()
 	w.j.tail = appendTail(w.j.tail, p, defaultTailBytes)
 	if w.j.artifactFile != nil {
 		if _, err := w.j.artifactFile.Write(p); err != nil {
@@ -391,10 +386,8 @@ func (m *Manager) startInvalid(parentSession, kind, label string, validationErr 
 		Label:            label,
 		SessionID:        parentSession,
 		status:           Failed,
-		startedAt:        finishedAt,
-		activityAt:       finishedAt,
-		finishedAt:       finishedAt,
-		runReturned:      true,
+		clock:            jobClock{startedAt: finishedAt, activityAt: finishedAt, finishedAt: finishedAt},
+		outcome:          jobOutcome{returned: true},
 		cancel:           func() {},
 		done:             make(chan struct{}),
 		artifactComplete: false,
@@ -479,8 +472,8 @@ func (m *Manager) writeJobMetaLocked(j *Job, st Status) error {
 		SessionID:        j.SessionID,
 		OwnerID:          m.ownerID,
 		Status:           st,
-		StartedAt:        j.startedAt,
-		FinishedAt:       j.finishedAt,
+		StartedAt:        j.clock.startedAt,
+		FinishedAt:       j.clock.finishedAt,
 		ArtifactComplete: st != Running && j.artifactComplete && j.artifactErr == "",
 		ArtifactError:    j.artifactErr,
 		LogPath:          filepath.Base(j.artifactPath),
@@ -620,13 +613,13 @@ func (m *Manager) monitorStalled(parentSession string, j *Job) {
 			return
 		case <-timer.C:
 			j.mu.Lock()
-			if j.runReturned || j.status != Running {
+			if j.outcome.returned || j.status != Running {
 				j.mu.Unlock()
 				return
 			}
-			idle := time.Since(time.UnixMilli(j.activityAt))
-			if idle >= m.stalledWarning && !j.stalled {
-				j.stalled = true
+			idle := time.Since(time.UnixMilli(j.clock.activityAt))
+			if idle >= m.stalledWarning && !j.clock.stalled {
+				j.clock.stalled = true
 				j.mu.Unlock()
 				m.recordStalled(parentSession, j.ID, j.Kind, j.Label)
 				return
@@ -753,12 +746,12 @@ func (m *Manager) OutputForSession(parentSession, id string) (text string, statu
 			j.readOffset = int64(len(full))
 		}
 	}
-	// A task job streams nothing to the buffer — its answer lands in result. Once
-	// it is terminal with no buffered output, surface that result once so a task's
-	// answer is visible here too (bash_output's description promises task support).
-	if text == "" && j.status != Running && j.result != "" && !j.resultRead {
-		text = j.result
-		j.resultRead = true
+	// A task job streams nothing to the tail buffer — its answer lands in
+	// outcome.text. Surface it once when terminal with no buffered output, so a
+	// task's answer is visible here too (bash_output promises task support).
+	if text == "" && j.status != Running && j.outcome.text != "" && !j.outcome.read {
+		text = j.outcome.text
+		j.outcome.read = true
 	}
 	if j.artifactErr != "" {
 		if text != "" {
@@ -924,7 +917,7 @@ func (m *Manager) results(targets []*Job) []Result {
 	out := make([]Result, 0, len(targets))
 	for _, j := range targets {
 		j.mu.Lock()
-		text := j.result
+		text := j.outcome.text
 		if text == "" && j.artifactPath != "" {
 			text = j.readArtifactAllLocked()
 		}
@@ -972,7 +965,7 @@ func (m *Manager) RunningForSession(parentSession string) []View {
 		// runtime idle early. The public view remains "running" while a stop is
 		// in flight; clients may render a local "stopping" state after they
 		// request cancellation.
-		out = append(out, View{ID: j.ID, Kind: j.Kind, Label: j.Label, Status: string(Running), StartedAt: j.startedAt})
+		out = append(out, View{ID: j.ID, Kind: j.Kind, Label: j.Label, Status: string(Running), StartedAt: j.clock.startedAt})
 		j.mu.Unlock()
 	}
 	return out
@@ -1484,9 +1477,7 @@ func (m *Manager) loadSessionArtifacts(parentSession, sessionPath, dir string) {
 			Label:            meta.Label,
 			SessionID:        parentSession,
 			status:           meta.Status,
-			startedAt:        meta.StartedAt,
-			finishedAt:       meta.FinishedAt,
-			activityAt:       meta.FinishedAt,
+			clock:            jobClock{startedAt: meta.StartedAt, finishedAt: meta.FinishedAt, activityAt: meta.FinishedAt},
 			done:             done,
 			artifactPath:     logPath,
 			artifactMetaPath: filepath.Join(dir, id+jobMetaExt),

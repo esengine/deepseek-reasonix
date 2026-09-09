@@ -9,7 +9,7 @@
     "layering": 1,
     "marker": 0,
     "narrative": 64,
-    "struct-state": 115,
+    "struct-state": 109,
     "test-file-size": 69744
   },
   "files": {
@@ -1141,8 +1141,7 @@
     "internal/jobs/jobs.go": {
       "essay": 21,
       "file-size": 1271,
-      "function-size": 12,
-      "struct-state": 6
+      "function-size": 12
     },
     "internal/jobs/jobs_extra_test.go": {
       "essay": 1

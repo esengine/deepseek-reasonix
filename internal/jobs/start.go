@@ -32,8 +32,7 @@ func (m *Manager) StartForSession(parentSession, kind, label string, run func(ct
 		Label:            label,
 		SessionID:        parentSession,
 		status:           Running,
-		startedAt:        startedAt,
-		activityAt:       startedAt,
+		clock:            jobClock{startedAt: startedAt, activityAt: startedAt},
 		cancel:           cancel,
 		done:             make(chan struct{}),
 		artifactPath:     logPath,
@@ -78,7 +77,7 @@ func (m *Manager) runJob(ctx context.Context, j *Job, run func(context.Context, 
 	defer m.wg.Done()
 	result, err := runRecovered(ctx, jobWriter{j}, run)
 	j.mu.Lock()
-	j.runReturned = true
+	j.outcome.returned = true
 	j.mu.Unlock()
 
 	var st Status
@@ -101,7 +100,7 @@ func (m *Manager) runJob(ctx context.Context, j *Job, run func(context.Context, 
 				j.artifactErr = writeErr.Error()
 			}
 		} else {
-			j.result = result
+			j.outcome.text = result
 		}
 		j.tail = appendTail(j.tail, []byte(result), defaultTailBytes)
 		j.mu.Unlock()
@@ -117,7 +116,7 @@ func (m *Manager) runJob(ctx context.Context, j *Job, run func(context.Context, 
 	if j.artifactErr != "" {
 		j.artifactComplete = false
 	}
-	j.finishedAt = finishedAt
+	j.clock.finishedAt = finishedAt
 	if targetDir != "" {
 		if moveErr := j.moveArtifactToDirLocked(targetDir); moveErr != nil {
 			j.noteArtifactErr("migration: " + moveErr.Error())
@@ -138,7 +137,7 @@ func (m *Manager) runJob(ctx context.Context, j *Job, run func(context.Context, 
 		j.status = st
 	}
 	if j.artifactPath != "" && j.artifactComplete {
-		j.result = ""
+		j.outcome.text = ""
 		j.tail = nil
 	}
 	j.mu.Unlock()

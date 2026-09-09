@@ -31,7 +31,7 @@ func TestCompletedJobPersistsOutputAndReleasesMemory(t *testing.T) {
 
 	j.mu.Lock()
 	tailLen := len(j.tail)
-	result := j.result
+	result := j.outcome.text
 	artifactPath := j.artifactPath
 	j.mu.Unlock()
 
