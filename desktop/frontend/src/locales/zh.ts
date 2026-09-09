@@ -1416,6 +1416,12 @@ export const zh: Record<DictKey, string> = {
   "recovery.retireCoveredFailed": "清理已覆盖版本失败：{error}",
 
   // 项目树
+  "projectTree.consolidateRecoveryCopies": "合并恢复副本",
+  "projectTree.consolidateDone": "已合并恢复副本：主干保留 {messages} 条消息，{count} 个副本已归档",
+  "projectTree.consolidateFolded": "已归档 {count} 个冗余恢复副本",
+  "projectTree.consolidateNothing": "没有需要合并的恢复副本",
+  "projectTree.consolidateBlocked": "副本与主会话各有独有内容（副本 {winner} 条 / 主会话 {main} 条），无法自动合并",
+  "projectTree.consolidateForceAction": "仍要合并（当前主会话将归档）",
   "projectTree.workspaceTitle": "项目",
   "projectTree.pinnedTitle": "置顶",
   "projectTree.searchPlaceholder": "搜索项目或会话",

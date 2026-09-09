@@ -145,6 +145,7 @@ func (a *App) metadataProjectTopics(scope, workspaceRoot string) []ProjectNode {
 			Key: kind + "_" + topicID, Kind: kind,
 			Label: a.localizedTopicTitle(title, sources[topicID]), Root: workspaceRoot,
 			TopicID: topicID, ProjectColor: projectColor,
+			SessionPath: a.catalogSessionPathForTopic(scope, workspaceRoot, topicID),
 			CreatedAt: topicCreatedAtForTree(created, topicID), Pinned: containsDesktopString(pinnedIDs, topicID), SortOrder: sortOrder,
 			Open: overlay.open, Running: overlay.running, Status: overlay.status,
 			TurnsState: string(sessioncatalog.TurnsUnknown), Health: string(sessioncatalog.HealthOK),
@@ -349,6 +350,11 @@ func (a *App) projectNodeFromCatalogTopic(topic sessioncatalog.TopicRecord, topi
 	node := ProjectNode{
 		Key: kind + "_" + topic.TopicID, Kind: kind, Label: a.localizedTopicTitle(topic.Title, topic.TitleSource),
 		Root: topic.WorkspaceRoot, TopicID: topic.TopicID, Turns: topic.Turns,
+		// RepresentativePath is the topic's automatic open target (the
+		// canonical main transcript). Surfacing it here lets session-scoped
+		// context-menu actions — e.g. "merge recovery copies" — work on
+		// topics that were never opened in this window.
+		SessionPath: topic.RepresentativePath,
 		Preview:    topicSessionPreview(topic.Sessions, topic.RepresentativePath),
 		TurnsState: string(topic.TurnsState), Health: string(topic.Health),
 		CreatedAt: topic.CreatedAt, LastActivityAt: topic.LastActivityAt,

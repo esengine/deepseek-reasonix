@@ -1164,6 +1164,12 @@ export const zhTW: Record<DictKey, string> = {
   "recovery.retireCoveredFailed": "清理已覆蓋版本失敗：{error}",
 
   // 專案樹
+  "projectTree.consolidateRecoveryCopies": "合併恢復副本",
+  "projectTree.consolidateDone": "已合併恢復副本：主幹保留 {messages} 條訊息，{count} 個副本已封存",
+  "projectTree.consolidateFolded": "已封存 {count} 個冗餘恢復副本",
+  "projectTree.consolidateNothing": "沒有需要合併的恢復副本",
+  "projectTree.consolidateBlocked": "副本與主會話各有獨有內容（副本 {winner} 條 / 主會話 {main} 條），無法自動合併",
+  "projectTree.consolidateForceAction": "仍要合併（當前主會話將封存）",
   "projectTree.workspaceTitle": "專案",
   "projectTree.pinnedTitle": "置頂",
   "projectTree.searchPlaceholder": "搜尋專案或會話",

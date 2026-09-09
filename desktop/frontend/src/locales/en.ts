@@ -1415,6 +1415,12 @@ export const en = {
   "recovery.retireCoveredFailed": "Could not remove covered versions: {error}",
 
   // project tree
+  "projectTree.consolidateRecoveryCopies": "Merge recovery copies",
+  "projectTree.consolidateDone": "Recovery copies merged: main keeps {messages} messages, {count} copies archived",
+  "projectTree.consolidateFolded": "Archived {count} redundant recovery copies",
+  "projectTree.consolidateNothing": "No recovery copies to merge",
+  "projectTree.consolidateBlocked": "The copy and the main each hold unique turns (copy {winner} / main {main}); automatic merge refused",
+  "projectTree.consolidateForceAction": "Merge anyway (archive current main)",
   "projectTree.workspaceTitle": "Projects",
   "projectTree.pinnedTitle": "Pinned",
   "projectTree.searchPlaceholder": "Search projects or sessions",

@@ -642,6 +642,9 @@ func (a *App) pinnedTopicShells(scope, workspaceRoot string, topicIDs, pinnedIDs
 			Key: kind + "_" + topicID, Kind: kind,
 			Label: a.localizedTopicTitle(title, sources[topicID]), Root: workspaceRoot,
 			TopicID: topicID, ProjectColor: normalizeProjectColor(projectColor),
+			// Keep pinned shells actionable for session-scoped context-menu
+			// entries (e.g. "merge recovery copies") even while collapsed.
+			SessionPath: a.catalogSessionPathForTopic(scope, workspaceRoot, topicID),
 			CreatedAt: topicCreatedAtForTree(created, topicID), Pinned: true,
 			TurnsState: string(sessioncatalog.TurnsUnknown), Health: string(sessioncatalog.HealthOK),
 			Children: []ProjectNode{},

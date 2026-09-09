@@ -2980,6 +2980,10 @@ func (a *App) DeleteRecoveryCopy(path string) error {
 
 var errRecoveryCopyNotRedundant = errors.New("recovery session contains content not preserved by its parent")
 
+// errNoRecoveryCopiesToConsolidate is returned when the session-action
+// "merge recovery copies" finds no recovery copies for the session.
+var errNoRecoveryCopiesToConsolidate = errors.New("this session has no recovery copies to merge")
+
 func (a *App) deleteSession(path string) error {
 	dir := a.activeSessionDir()
 	sessionPath, key, err := validateSessionPath(dir, path)
