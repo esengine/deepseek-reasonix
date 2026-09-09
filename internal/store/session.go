@@ -39,6 +39,15 @@ func SessionRecoveryState(sessionPath string) string {
 	return sessionStem(sessionPath) + ".recovery.json"
 }
 
+// SessionTranscriptProjection stores display-only records and their exact
+// committed event coverage; it never supplies provider-visible messages.
+func SessionTranscriptProjection(sessionPath string) string {
+	if strings.TrimSpace(sessionPath) == "" {
+		return ""
+	}
+	return sessionStem(sessionPath) + ".transcript-projection.json"
+}
+
 // SessionContext is the context-projection / compaction-state sidecar
 // (<id>.context.json). It holds the model-visible projection and cache
 // telemetry; transcript authority remains with the native event log once one
@@ -250,6 +259,7 @@ func SessionSidecarFiles(sessionPath string) []string {
 		SessionTurnEventLogDamaged(sessionPath),
 		SessionEventIndex(sessionPath),
 		SessionDisplayIndex(sessionPath),
+		SessionTranscriptProjection(sessionPath),
 		SessionConflictLog(sessionPath),
 		SessionRecoveryState(sessionPath),
 		SessionContext(sessionPath),

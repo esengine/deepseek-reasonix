@@ -236,6 +236,9 @@ func (a *App) advanceSessionRuntimeEpochLocked(tab *WorkspaceTab) string {
 	if tab.sink != nil {
 		tab.sink.setRuntimeEpoch(rt.Epoch)
 	}
+	if binder, ok := tab.Ctrl.(interface{ BindTranscriptRuntimeEpoch(string) }); ok {
+		binder.BindTranscriptRuntimeEpoch(rt.Epoch)
+	}
 	return rt.Epoch
 }
 

@@ -19,6 +19,7 @@ type historyToolCall struct {
 }
 
 type historyMessage struct {
+	MessageID        string                           `json:"messageId,omitempty"`
 	ServerSearch     []provider.ServerSearchCall      `json:"serverSearch,omitempty"`
 	ProtocolRecovery *provider.ProtocolRecoveryAction `json:"protocolRecovery,omitempty"`
 	Role             string                           `json:"role"`
@@ -46,7 +47,7 @@ func historyMessages(msgs []provider.Message) []historyMessage {
 				continue
 			}
 		}
-		hm := historyMessage{Role: string(m.Role), Content: historyMessageContent(m)}
+		hm := historyMessage{MessageID: m.ID, Role: string(m.Role), Content: historyMessageContent(m)}
 		if m.Role == provider.RoleAssistant {
 			hm.Reasoning = m.ReasoningContent
 			for _, search := range m.ServerSearch {

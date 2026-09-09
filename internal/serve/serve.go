@@ -565,6 +565,7 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("GET /events", s.events)
 	mux.HandleFunc("GET /runtime-states", s.runtimeStates)
 	mux.HandleFunc("GET /history", s.history)
+	s.registerTranscriptRoutes(mux)
 	mux.HandleFunc("GET /context", s.context)
 	mux.HandleFunc("POST /submit", s.submit)
 	s.registerInboxRoutes(mux)
@@ -705,45 +706,9 @@ func (s *Server) logoWordmark(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write(logoWordmarkSVG)
 }
 
-// submit runs raw user input as a turn (slash commands and @-references
-// resolved by the controller). Returns 202 — output arrives on the event stream.
-// An optional "format":"json_object" asks the model for structured JSON output
-// on this turn (text.format on the wire).
 func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Input      string `json:"input"`
-		Format     string `json:"format"`
-		Action     string `json:"action"`
-		RecoveryID string `json:"recoveryId"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || (body.Input == "" && body.Action != control.ProtocolRecoveryAction) {
-		http.Error(w, "missing input", http.StatusBadRequest)
-		return
-	}
-	body.Format = strings.TrimSpace(body.Format)
-	body.Action = strings.TrimSpace(body.Action)
-	if body.Action == control.ProtocolRecoveryAction && strings.TrimSpace(body.RecoveryID) == "" {
-		http.Error(w, "missing recoveryId", http.StatusBadRequest)
-		return
-	}
-	switch body.Format {
-	case "", "json_object":
-		// Supported: empty = default text output, json_object = structured.
-	default:
-		http.Error(w, `unsupported format (supported: "json_object")`, http.StatusBadRequest)
-		return
-	}
-	if err := validateSubmitAction(body.Format, body.Action); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	trimmed := strings.TrimSpace(body.Input)
-	// Typed recovery guidance is never dispatched as a management command.
-	if body.Action != "" {
-		trimmed = ""
-	}
-	if strings.HasPrefix(trimmed, "!") {
-		http.Error(w, "shell commands are unavailable over HTTP", http.StatusForbidden)
+	body, trimmed, ok := decodeSubmitRequest(w, r)
+	if !ok {
 		return
 	}
 	// Session rotations must complete while bindMu is held. Controller.Submit
@@ -805,6 +770,9 @@ func (s *Server) submit(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "protocol recovery is unavailable or stale", http.StatusConflict)
 			return
 		}
+	}
+	if routing, ok := ctrl.(interface{ SetTurnSubmissionID(string) }); ok {
+		routing.SetTurnSubmissionID(body.SubmissionID)
 	}
 	submitWithAction(ctrl, body.Input, body.Format, body.Action, body.RecoveryID)
 	if isServeManagementCommand(trimmed) && !ctrl.Running() && !ctrl.RuntimeStatus().PendingPrompt {

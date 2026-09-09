@@ -192,10 +192,11 @@ func (o *turnOrchestrator) runSubagentSkillTurns(ctx context.Context, skills []s
 		toolEvent.Output = answer
 		c.sink.Emit(event.Event{Kind: event.ToolResult, Tool: toolEvent})
 		workDurationMs := max(int64(1), time.Since(turnStartedAt).Milliseconds())
-		c.executor.Session().Add(provider.Message{Role: provider.RoleAssistant, Content: answer, WorkDurationMs: workDurationMs})
+		messageID := agent.NewMessageID()
+		c.executor.Session().Add(provider.Message{ID: messageID, Role: provider.RoleAssistant, Content: answer, WorkDurationMs: workDurationMs})
 		display := agent.DisplayAssistantText(answer)
-		c.sink.Emit(event.Event{Kind: event.Text, Text: display})
-		c.sink.Emit(event.Event{Kind: event.Message, Text: display})
+		c.sink.Emit(event.Event{Kind: event.Text, MessageID: messageID, Text: display})
+		c.sink.Emit(event.Event{Kind: event.Message, MessageID: messageID, Text: display})
 	}
 
 	return nil
@@ -212,6 +213,10 @@ func (o *turnOrchestrator) runOrchestratedTurn(ctx context.Context, turn orchest
 	ctx = agent.WithSubagentImageCandidates(ctx, imageCandidates)
 	ctx = agent.WithRawUserInput(ctx, turn.raw)
 	ctx = withTurnInputOrigin(ctx, turn.synthetic)
+	userMessageID := agent.NewMessageID()
+	if c.executor != nil {
+		ctx = agent.WithUserMessageIdentity(ctx, c.executor.Session(), userMessageID)
+	}
 	continuation := turn.goalContinuation
 	var input string
 	if continuation != nil {
@@ -302,6 +307,8 @@ func (o *turnOrchestrator) runOrchestratedTurn(ctx context.Context, turn orchest
 	c.captureGoalRunWorkDuration(startMessages)
 	c.persistGoalDeliveryCheckpoint()
 	if err != nil {
+		fallback := persistedUserTurn(input, turn.raw, userImages, time.Now().UnixMilli())
+		fallback.ID = userMessageID
 		// When the user explicitly cancels, keep the real prompt and any fully
 		// paired tool work. Partial reasoning/output remains durable for display
 		// but is marked local-only, and a bounded recovery summary is folded into
@@ -310,19 +317,21 @@ func (o *turnOrchestrator) runOrchestratedTurn(ctx context.Context, turn orchest
 			if turn.synthetic {
 				c.stripInterruptedSyntheticTurnMessagesAfter(startMessages)
 			} else {
-				c.stripCancelledVisibleTurnMessagesAfterWithFallback(startMessages,
-					persistedUserTurn(input, turn.raw, userImages, time.Now().UnixMilli()))
+				c.stripCancelledVisibleTurnMessagesAfterWithFallback(startMessages, fallback)
 			}
-		} else if !turn.synthetic && c.hasInterruptedDisplayAfter(startMessages,
-			persistedUserTurn(input, turn.raw, nil, 0)) {
+		} else if !turn.synthetic && c.hasInterruptedDisplayAfter(startMessages, fallback) {
 			// Provider/API failures use the same safe recovery path as an explicit
 			// stop once the agent has recorded a partial stream. Completed tool
 			// pairs survive; unsafe stream fragments stay local-only.
-			c.stripCancelledVisibleTurnMessagesAfterWithFallback(startMessages,
-				persistedUserTurn(input, turn.raw, userImages, time.Now().UnixMilli()))
+			c.stripCancelledVisibleTurnMessagesAfterWithFallback(startMessages, fallback)
 		}
 		return err
 	}
+	return o.executeApprovedPlan(ctx)
+}
+
+func (o *turnOrchestrator) executeApprovedPlan(ctx context.Context) error {
+	c := o.c
 	c.mu.Lock()
 	plan := c.sessionSettings.planMode
 	c.mu.Unlock()

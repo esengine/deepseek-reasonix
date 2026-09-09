@@ -15,10 +15,14 @@ export function removeEmptyAssistantItems(items: Item[]): Item[] {
 }
 
 /** Allocate one provider sampling segment without changing the backend turn identity. */
-export function ensureAssistant(s: State): State {
-  if (s.currentAssistant && s.items.some((item) => item.kind === "assistant" && item.id === s.currentAssistant)) return s;
+export function ensureAssistant(s: State, messageId?: string): State {
+  const canonicalId = messageId ? `m:${messageId}` : undefined;
+  if ((!canonicalId || canonicalId === s.currentAssistant) && s.currentAssistant && s.items.some((item) => item.kind === "assistant" && item.id === s.currentAssistant)) return s;
+  if (canonicalId && s.items.some((item) => item.kind === "assistant" && item.id === canonicalId)) {
+    return { ...s, currentAssistant: canonicalId };
+  }
   const ordinal = s.assistantSegmentOrdinal;
-  const id = s.activeTurnId ? `a:${s.activeTurnId}:${ordinal}` : `a${s.seq}`;
+  const id = canonicalId ?? (s.activeTurnId ? `a:${s.activeTurnId}:${ordinal}` : `a${s.seq}`);
   const item: AssistantItem = { kind: "assistant", id, text: "", reasoning: "", streaming: true, wasStreamed: true, searchSources: s.pendingSearchSources?.length ? s.pendingSearchSources : undefined };
   return {
     ...s,
@@ -33,5 +37,6 @@ export function ensureAssistant(s: State): State {
 export function ensureActiveAssistant(s: State): State {
   const active = ensureAssistant(s);
   const id = active.currentAssistant!;
-  return active.live?.id === id ? active : { ...active, live: { id, text: "", reasoning: "", reasoningComplete: false } };
+  const item = active.items.find((item): item is AssistantItem => item.kind === "assistant" && item.id === id);
+  return active.live?.id === id ? active : { ...active, live: { id, text: item?.text ?? "", reasoning: item?.reasoning ?? "", reasoningComplete: item?.reasoningComplete ?? false } };
 }

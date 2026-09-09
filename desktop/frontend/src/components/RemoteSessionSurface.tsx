@@ -10,6 +10,7 @@ import { projectSessionAvailability } from "../lib/sessionAvailability";
 import type { RemoteSessionApi } from "../lib/useRemoteSession";
 export { hydrateRemoteTelemetry, loadRemoteStatusSnapshot } from "../lib/remoteTelemetry";
 import type { TabMeta, WireApproval, WireAsk } from "../lib/types";
+import { useT } from "../lib/i18n";
 
 /**
  * RemoteSessionSurface renders the active remote tab's content area with
@@ -23,6 +24,7 @@ export function RemoteSessionSurface({ tab, session, surfaceCommitToken, onSurfa
   tab: TabMeta; session: RemoteSessionApi;
 } & Pick<TranscriptProps, "surfaceCommitToken" | "onSurfacePaintReady">) {
   const navigateRemote = useRemoteNavigationCommand();
+  const t = useT();
   const availability = projectSessionAvailability({ remote: session });
   const ready = availability.kind === "ready";
   const hasContent = session.transcript.items.length > 0 || Boolean(session.transcript.live?.text || session.transcript.live?.reasoning);
@@ -60,6 +62,7 @@ export function RemoteSessionSurface({ tab, session, surfaceCommitToken, onSurfa
     }} />
     <main className="main">
     <div className="remote-surface remote-surface--ready">
+      {session.hydrated && session.syncMode === "legacy" ? <div className="remote-surface__detail" role="status">{t("remote.legacyTranscriptSync")}</div> : null}
       {!ready && !hasContent ? <SessionRecoveryPlaceholder availability={availability} /> : <Transcript
         items={session.transcript.items}
         live={session.transcript.live}
@@ -69,6 +72,15 @@ export function RemoteSessionSurface({ tab, session, surfaceCommitToken, onSurfa
         surfaceCommitToken={surfaceCommitToken}
         onSurfacePaintReady={onSurfacePaintReady}
         running={session.transcript.running}
+        hasOlderHistory={session.transcript.historyHasOlder}
+        stableHistoryPaging={session.syncMode === "snapshot"}
+        historyStartTurn={session.transcript.historyStartTurn}
+        historyTotalTurns={session.transcript.historyTotalTurns}
+        loadingOlderHistory={session.transcript.historyOlderLoading}
+        olderHistoryError={session.transcript.historyOlderError}
+        onLoadOlderHistory={session.loadOlderHistory}
+        contentRevision={session.transcript.historyLayoutRevision}
+        historyMutation={session.transcript.historyMutation}
         checkpoints={session.transcript.checkpoints}
         onPrompt={(prompt) => runAction(() => session.submit(prompt))}
         onRewind={(turn, scope) => runAction(() => session.rewind(turn, scope))}

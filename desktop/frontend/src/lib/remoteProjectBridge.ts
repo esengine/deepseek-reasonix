@@ -14,6 +14,7 @@ export interface RemoteProjectBindings {
   DeleteRemoteProjectSession(hostId: string, workspace: string, name: string): Promise<void>;
   CloseRemoteTab(tabId: string): Promise<void>;
   SubmitRemoteTab(tabId: string, text: string): Promise<void>;
+	SubmitRemoteTabWithSubmission?(tabId: string, text: string, submissionId: string): Promise<void>;
   ClearRemoteTabSession(tabId: string): Promise<void>;
   CancelRemoteTab(tabId: string): Promise<void>;
   ReclaimRemoteTabSession(tabId: string): Promise<void>;
@@ -27,6 +28,7 @@ export interface RemoteProjectBindings {
   SetRemoteTabToolApprovalMode(tabId: string, mode: string): Promise<void>;
   SetRemoteTabGoal(tabId: string, goal: string): Promise<void>;
   RemoteTabSnapshot(tabId: string): Promise<RemoteTabSnapshot>;
+  RemoteTabMetadata?(tabId: string): Promise<RemoteTabSnapshot>;
   RemoteTabStatus(tabId: string): Promise<unknown>;
   SetRemoteTabEffort(tabId: string, level: string): Promise<void>;
   SetRemoteTabQualityFloor(tabId: string, floor: string): Promise<void>;

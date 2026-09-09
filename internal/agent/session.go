@@ -376,6 +376,15 @@ func (s *Session) Snapshot() []provider.Message {
 	return msgs
 }
 
+// DisplayBaseline captures messages and their rewrite/head identity together.
+// The controller calls this at an idle/admission boundary, before any new
+// streaming event can commit to its display projection.
+func (s *Session) DisplayBaseline() (messages []provider.Message, headID string, rewriteEpoch uint64) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]provider.Message(nil), s.Messages...), s.head.ref.HeadID, uint64(s.rewriteVersion)
+}
+
 // Len returns the number of messages, safe to call from any goroutine.
 func (s *Session) Len() int {
 	s.mu.RLock()

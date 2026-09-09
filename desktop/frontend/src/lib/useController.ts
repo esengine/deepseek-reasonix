@@ -20,7 +20,8 @@ import { findTabAfterSubmitFailure, reduceManagementConfirmation, reduceSubmitFa
 import { formatContextMaintenanceNotice, isNewMaintenanceOperation, rememberMaintenanceOperation } from "./contextMaintenanceTypes";
 import { formatGuardianAssessmentNotice } from "./guardianEvents";
 import { normalizeCompletionSummary } from "./completionSummary";
-import { historicalResultNotice, withRunningChecks, withTurnResult } from "./completionResultState";
+import { withRunningChecks, withTurnResult } from "./completionResultState";
+import { applyTurnCheckpoint, historyMessagesToItems, historyPageItems } from "./historyItems";
 import { mergeTurnResult } from "./turnResult";
 import { invalidateSharedQuery } from "./queryCoalesce";
 import { replayPendingPromptsForActiveTab } from "./promptReplay";
@@ -30,6 +31,9 @@ import { aliasActivationRequest, noteActivationRequested, noteActivationSettled,
 import { applyLiveSegments, coalesceStreamDeltas, completeLiveReasoning, type StreamDeltaEntry, type StreamSegment } from "./streamDeltaBatch";
 import { assistantHasContent, ensureActiveAssistant, ensureAssistant, removeEmptyAssistantItems } from "./assistantItems";
 import { getTranscriptStore } from "./transcriptStore";
+import { transcriptPageState, transcriptSnapshotState } from "./transcriptSnapshotState";
+import { resolveSnapshotItems, StaleCut, TranscriptSnapshotClient } from "./transcriptSnapshotClient";
+import type { TranscriptSnapshot } from "./transcriptProtocol";
 import { recordFrontendDiagnostic } from "./frontendDiagnosticBridge";
 import { uiPerfTracker } from "./uiPerf";
 import { getLocale, t } from "./i18n";
@@ -46,7 +50,6 @@ import { isHostRecoveryGuidance } from "./hostRecoverySteer";
 import { activeTabHydrationPlan, canAdoptUnboundLiveSurface, duplicateLiveItemIds, hasCachedLiveTurn, hasReusableCachedTranscript, hydratedHistoryApplyMode, sameSessionHydrateIdentity, sameSessionPlaceholderItems, shouldPreferResidentHistory, type HydrateSurfacePolicy } from "./hydrateHistoryApply";
 import { hydrateIdentityCurrent } from "./sessionIdentity";
 import { historyPageRequestBudget } from "./historyPaging";
-import { createUniqueItemIDAllocator } from "./historyItemIds";
 import { withRemoteProviderUnreachable, withRemoteTurnInterrupted } from "./remoteTurnState";
 import type { NavigationResult, SurfaceDataCommit, SurfaceDataOutcome } from "./navigationSurfaceTransition";
 import { sameStringList, sameTodoList } from "./todoVisibility";
@@ -56,7 +59,7 @@ import { useStaleTurnWatchdog } from "./useStaleTurnWatchdog";
 import { useRemoteTabSwitch } from "./useRemoteTabSwitch";
 import { useNavigationIntentFence } from "./useNavigationIntentFence";
 import type { SearchSource } from "./searchSources";
-import { attachWebSearchOutput, historySearchAndAnswer } from "./searchTranscript";
+import { attachWebSearchOutput } from "./searchTranscript";
 import { fileDiffFromWire, parseTodos, summarize, summarizeFileDiff, type ToolFileDiff } from "./tools";
 import { modeHasAutoApproveTools, normalizeMode, normalizeToolApprovalMode, type QualityFloor } from "./types";
 import type {
@@ -96,6 +99,7 @@ import type {
 } from "./types";
 
 export { foregroundRunningFromRuntimeMeta } from "./runtimeMeta";
+export { historyMessagesToItems, historyToolError, isReadOnlyTool } from "./historyItems";
 export {
   deliveryReadinessDetail,
   localizedBackendNoticeText,
@@ -269,7 +273,7 @@ const HISTORY_PAGE_TURNS = 60;
 
 export type TurnPhaseName = "working" | "checking" | "verifying" | "reviewing" | string;
 export type Item =
-  | { kind: "user"; id: string; submissionId?: string; text: string; submitText?: string; failed?: boolean; createdAt?: number; checkpointTurn?: number; historyTurn?: number }
+  | { kind: "user"; id: string; messageId?: string; submissionId?: string; text: string; submitText?: string; failed?: boolean; createdAt?: number; checkpointTurn?: number; historyTurn?: number }
   | { kind: "assistant"; id: string; text: string; reasoning: string; streaming: boolean; wasStreamed?: true; reasoningComplete?: boolean; reasoningDurationMs?: number; workDurationMs?: number; memoryCitations?: MemoryCitation[]; searchSources?: SearchSource[] }
   | { kind: "phase"; id: string; text: string }
   | { kind: "notice"; id: string; level: "info" | "warn"; text: string; detail?: string; code?: string; title?: string; variant?: "delivery" | "completion"; action?: "continue_delivery" | "open_changes" | "recover_context"; recoveryId?: string; completionSummary?: WireCompletionSummary; decisionReceipt?: WireDecisionReceipt; missing?: string[]; inboxItemId?: string }
@@ -285,6 +289,7 @@ export type Item =
   | {
       kind: "tool";
       id: string;
+		messageId?: string;
       name: string;
       args: string;
       readOnly: boolean;
@@ -380,6 +385,8 @@ export function isSteerNoticeText(text: string): boolean {
   return text.startsWith(STEER_NOTICE_PREFIX);
 }
 export interface State extends ReadStatusHost {
+  transcriptProtocol?: 1;
+  transcriptItemOrder?: Record<string, number>;
   items: Item[];
   /** Exact backend-owned turn targeted by Stop/Ask. */
   activeTurnId?: string;
@@ -768,26 +775,6 @@ function historyFingerprintMatchesMeta(history: { revision: number; revisionKnow
   return true;
 }
 
-/** Mirrors Go backend's ReadOnly() hints. */
-export function isReadOnlyTool(name: string): boolean {
-  switch (name) {
-    case "read_file":
-    case "ls":
-    case "grep":
-    case "glob":
-    case "web_fetch":
-    case "web_search":
-    case "code_index":
-    case "bash_output":
-    case "waitJob":
-    case "todo_write":
-    case "read_skill":
-      return true;
-    default:
-      return false;
-  }
-}
-
 export { isBatchedReadOnlyTool } from "./searchTranscript";
 
 function historyRevisionIsOlder(current: number | undefined, incoming: number | undefined): boolean {
@@ -823,6 +810,8 @@ type Action =
   | { type: "message_action_start"; action: MessageActionState }
   | { type: "message_action_done" }
   | { type: "history"; messages: HistoryMessage[]; remote?: boolean }
+  | { type: "transcript_snapshot"; snapshot: TranscriptSnapshot; remote?: boolean }
+  | { type: "transcript_page"; snapshot: TranscriptSnapshot }
   | { type: "history_page"; page: HistoryPage; mode: "replace" | "prepend" }
   // TranscriptStore-driven history actions (windowed HistorySliceForTab flow).
   // Items carry stable entryId-derived ids; prepend also lists existing item
@@ -864,230 +853,6 @@ function backendStatusFromRuntimeMeta(meta: RuntimeMetaSnapshot): Extract<Action
 
 // ---- reducer helpers (unchanged logic) ----
 
-export function historyMessagesToItems(messages: HistoryMessage[], idPrefix: string, startSeq = 0): { items: Item[]; seq: number } {
-  const resultByID = new Map<string, HistoryMessage>();
-  for (const m of messages) {
-    if (m.role === "tool" && m.toolCallId && !resultByID.has(m.toolCallId)) {
-      resultByID.set(m.toolCallId, m);
-    }
-  }
-  const positionalResults = positionalToolResults(messages);
-  const consumedPositionalToolIndexes = new Set(Array.from(positionalResults.values(), (result) => result.index));
-
-  let items: Item[] = [];
-  let seq = startSeq;
-  const consumedToolIDs = new Set<string>();
-	const uniqueItemID = createUniqueItemIDAllocator();
-  for (let messageIndex = 0; messageIndex < messages.length; messageIndex += 1) {
-    const m = messages[messageIndex];
-    if (m.role === "system") continue;
-    if (m.role === "phase") {
-      if (m.content.trim() !== "") {
-        items.push({ kind: "phase", id: `${idPrefix}${seq}`, text: m.content });
-        seq++;
-      }
-      continue;
-    }
-    if (m.role === "notice") {
-      if (m.code === "incomplete_read") {
-        items = upsertReadPause(items, m.readPause, `${idPrefix}${seq++}`);
-        continue;
-      }
-      if (m.completionReceipt || m.completionSummary) {
-        const result = historicalResultNotice(m, `${idPrefix}${seq}`);
-        if (result) { items.push(result); seq++; }
-        continue;
-      }
-      if (m.code === "protocol_recovery" && m.pending && m.protocolRecovery?.id) {
-        items.push({kind:"notice",id:`${idPrefix}${seq++}`,level:"info",code:m.code,text:t("notice.protocolRecoveryBody"),action:"recover_context",recoveryId:m.protocolRecovery.id});
-        continue;
-      }
-      if (m.code === "final_readiness" && m.pending) {
-        items.push({
-          kind: "notice",
-          id: `${idPrefix}${seq}`,
-          level: "info",
-          variant: "delivery",
-          title: t("notice.deliveryIncompleteTitle"),
-          text: t("notice.deliveryIncompleteBody"),
-          detail: deliveryReadinessDetail(m.readiness),
-          action: "continue_delivery",
-          missing: readinessMissingIds(m.readiness),
-        });
-        seq++;
-        continue;
-      }
-      if (m.content.trim() !== "" || m.decisionReceipt) {
-        const next = appendNoticeItem(items, seq, `${idPrefix}${seq}`, m.level === "warn" ? "warn" : "info", m.content, m.detail, m.code, m.decisionReceipt);
-        items = next.items;
-        seq = next.seq;
-      }
-      continue;
-    }
-    if (m.role === "compaction") {
-      items.push({
-        kind: "compaction",
-        id: `${idPrefix}${seq}`,
-        pending: Boolean(m.pending),
-        trigger: m.trigger ?? "",
-        messages: m.messages ?? 0,
-        summary: m.summary ?? "",
-        archive: m.archive ?? "",
-      });
-      seq++;
-      continue;
-    }
-    if (m.role === "user") {
-      if (m.content.trim() === "") continue;
-      items.push({ kind: "user", id: `${idPrefix}${seq}`, text: m.content, submitText: m.submitText, createdAt: m.createdAt, checkpointTurn: m.checkpointTurn });
-      seq++;
-      continue;
-    }
-    if (m.role === "assistant") {
-      const memoryCitations = asArray<MemoryCitation>(m.memoryCitations);
-      const built = historySearchAndAnswer(`${idPrefix}${seq}`, {
-        content: m.content,
-        reasoning: m.reasoning,
-        workDurationMs: m.workDurationMs,
-        memoryCitations: memoryCitations.length > 0 ? memoryCitations : undefined,
-        serverSearch: m.serverSearch,
-      });
-      for (const item of built) {
-        if (item.kind === "assistant") item.id = `${idPrefix}${seq}`;
-        items.push(item);
-        seq++;
-      }
-      const toolCalls = m.toolCalls ?? [];
-      for (let callIndex = 0; callIndex < toolCalls.length; callIndex += 1) {
-        const tc = toolCalls[callIndex];
-        const positionalResult = tc.id ? undefined : positionalResults.get(positionalToolResultKey(messageIndex, callIndex));
-        const result = tc.id ? resultByID.get(tc.id) : positionalResult?.message;
-        if (tc.id) consumedToolIDs.add(tc.id);
-        const archived = Boolean(tc.argumentsArchived || result?.toolResultArchived);
-        const output = result?.toolResultArchived ? undefined : result?.content ?? "";
-        const error = result?.toolResultError || (output ? historyToolError(output) : undefined);
-        const fileDiff = fileDiffFromWire(tc);
-        items.push({
-          kind: "tool",
-          id: uniqueItemID(tc.id || "", `${idPrefix}tool${seq}`),
-          name: tc.name,
-          args: tc.arguments ?? "",
-          readOnly: typeof tc.resolvedReadOnly === "boolean" ? tc.resolvedReadOnly : isReadOnlyTool(tc.name),
-          resolvedName: tc.resolvedName,
-          capabilityId: tc.capabilityId,
-          status: result ? (error ? "error" : "done") : "stopped",
-          output,
-          error,
-          dataArchived: archived || undefined,
-          subject: tc.subject,
-          summary: summarizeFileDiff(fileDiff) || tc.summary,
-          fileDiff,
-          isShell: tc.name === "bash" || (tc.id || "").startsWith("shell-"),
-          execution: result?.execution,
-        });
-        seq++;
-      }
-      continue;
-    }
-    if (m.role === "tool") {
-      if ((m.toolCallId && consumedToolIDs.has(m.toolCallId)) || consumedPositionalToolIndexes.has(messageIndex)) continue;
-      const output = m.toolResultArchived ? undefined : m.content;
-      const error = m.toolResultError || (output ? historyToolError(output) : undefined);
-      items.push({
-        kind: "tool",
-        id: uniqueItemID(m.toolCallId || "", `${idPrefix}tool${seq}`),
-        name: m.toolName || "tool",
-        args: "",
-        readOnly: isReadOnlyTool(m.toolName || "tool"),
-        status: error ? "error" : "done",
-        output,
-        error,
-        dataArchived: m.toolResultArchived || undefined,
-        isShell: (m.toolName || "") === "bash" || (m.toolCallId || "").startsWith("shell-"),
-        execution: m.execution,
-      });
-      seq++;
-      continue;
-    }
-  }
-  return { items, seq };
-}
-
-function applyTurnCheckpoint(items: Item[], submissionId: string | undefined, turn: number | undefined): Item[] {
-  if (!submissionId) return items;
-  const validTurn = turn !== undefined && Number.isInteger(turn) && turn >= 0;
-  let changed = false;
-  const next = items.map((item) => {
-    if (item.kind !== "user" || item.submissionId !== submissionId) return item;
-    changed = true;
-    return { ...item, submissionId: undefined, checkpointTurn: item.checkpointTurn ?? (validTurn ? turn : undefined) };
-  });
-  return changed ? next : items;
-}
-
-function historyPageItems(page: HistoryPage): { items: Item[]; seq: number; firstTurn: number } {
-  const converted = historyMessagesToItems(asArray(page.messages), `h${page.startTurn}-`, 0);
-  let historyTurn = page.startTurn + 1;
-  const items = converted.items.map((item) => {
-    if (item.kind !== "user") return item;
-    const user = { ...item, historyTurn };
-    historyTurn += 1;
-    return user;
-  });
-  return {
-    items,
-    seq: converted.seq,
-    // Legacy HistoryPage is 0-based while HistorySlice is 1-based. State uses
-    // the HistorySlice coordinate so every transcript consumer sees one model.
-    firstTurn: page.totalTurns > 0 ? page.startTurn + 1 : 0,
-  };
-}
-
-function positionalToolResults(messages: HistoryMessage[]): Map<string, { message: HistoryMessage; index: number }> {
-  const out = new Map<string, { message: HistoryMessage; index: number }>();
-  const consumed = new Set<number>();
-  for (let messageIndex = 0; messageIndex < messages.length; messageIndex += 1) {
-    const message = messages[messageIndex];
-    const toolCalls = message.role === "assistant" ? message.toolCalls ?? [] : [];
-    if (toolCalls.length === 0) continue;
-    let resultIndex = messageIndex + 1;
-    for (let callIndex = 0; callIndex < toolCalls.length; callIndex += 1) {
-      if (toolCalls[callIndex].id) continue;
-      let matched = false;
-      while (resultIndex < messages.length) {
-        const candidate = messages[resultIndex];
-        if (candidate.role !== "tool") break;
-        const candidateIndex = resultIndex;
-        resultIndex += 1;
-        if (candidate.toolCallId || consumed.has(candidateIndex)) continue;
-        consumed.add(candidateIndex);
-        out.set(positionalToolResultKey(messageIndex, callIndex), { message: candidate, index: candidateIndex });
-        matched = true;
-        break;
-      }
-      if (!matched) break;
-    }
-  }
-  return out;
-}
-
-function positionalToolResultKey(messageIndex: number, callIndex: number): string {
-  return `${messageIndex}:${callIndex}`;
-}
-
-export function historyToolError(output: string): string | undefined {
-  const trimmed = output.trimStart();
-  if (
-    trimmed.startsWith("[error") ||
-    trimmed.startsWith("Error:") ||
-    trimmed.startsWith("error:") ||
-    trimmed.startsWith("blocked:")
-  ) {
-    return output;
-  }
-  return undefined;
-}
-
 /** End the compatibility-path segment before a committed tool dispatch. */
 function settleCurrentAssistant(s: State, now = Date.now()): State {
   const settled = endTurnModelActivity(s, now, true);
@@ -1118,9 +883,8 @@ function liveReasoningDurationMs(live?: LiveStream): number | undefined {
 // applyDeltaSegments folds ordered stream segments into the assistant's live
 // stream in one state transition. Assumes applyEvent's preamble already ran.
 function applyDeltaSegments(s: State, segments: StreamSegment[]): State {
-  const active = ensureAssistant(s);
-  const id = active.currentAssistant!;
-  const base = active.live?.id === id ? active.live : { id, text: "", reasoning: "", reasoningComplete: false };
+  const active = ensureActiveAssistant(s);
+  const base = active.live!;
   const now = Date.now();
   const deltaChars = segments.reduce((total, segment) => total + segment.delta.length, 0);
   const next = { ...active, live: applyLiveSegments(base, segments, now), turnOutputChars: active.turnOutputChars + deltaChars };
@@ -1200,6 +964,22 @@ function resetTurnTiming(now = Date.now()): Pick<State, "turnStartAt" | "turnDon
 function confirmPendingUser(s: State, submissionId: string | undefined): State {
   if (!submissionId || s.pendingSubmissionId !== submissionId) return s;
   return { ...s, pendingUser: undefined, pendingSubmissionId: undefined };
+}
+
+// The admitted message identity and the mounted optimistic bubble identity
+// are separate: learning the former must not remount the latter.
+function preserveMountedUserIds(items: Item[], existing: Item[]): Item[] {
+  const mounted = new Map<string, string>();
+  for (const item of existing) {
+    if (item.kind === "user" && item.messageId) mounted.set(item.messageId, item.id);
+  }
+  if (mounted.size === 0) return items;
+  return items.map((item) => {
+    if (item.kind !== "user") return item;
+    const messageId = item.messageId ?? (item.id.startsWith("m:") ? item.id.slice(2) : undefined);
+    const id = messageId ? mounted.get(messageId) : undefined;
+    return id ? { ...item, id, messageId } : item;
+  });
 }
 
 function beginTurnModelActivity(s: State, now = Date.now()): State {
@@ -1353,14 +1133,30 @@ function applyStreamAttempt(s: State, e: WireEvent): State {
     }
     case "discard": {
       const journal = s.streamAttemptJournal;
+      if (e.messageId) {
+        const id = `m:${e.messageId}`;
+        const ownsCurrent = s.currentAssistant === id;
+        const ownsJournal = journal?.id === sa.id;
+        return {
+          ...s,
+          items: s.items.filter((item) => item.id !== id && !(item.kind === "tool" &&
+            (item.messageId === e.messageId || (ownsJournal && !item.messageId && journal.createdToolIds.includes(item.id))))),
+          live: s.live?.id === id ? undefined : s.live,
+          currentAssistant: ownsCurrent ? undefined : s.currentAssistant,
+          streamAttemptJournal: ownsJournal ? undefined : journal,
+          turnArgChars: ownsJournal ? journal.baselineTurnArgChars : s.turnArgChars,
+          lastStreamInterrupt: sa.reason ? { reason: sa.reason, attempt: sa.attempt ?? 0, at: promptEventClock() } : s.lastStreamInterrupt,
+        };
+      }
       if (!journal || journal.id !== sa.id) {
         // Stale/out-of-order discard for an older attempt — leave the current
         // journal (and live speculative UI) untouched.
         return s;
       }
       const remove = new Set(journal.createdToolIds);
+      const discardedMessageId = e.messageId ? `m:${e.messageId}` : undefined;
       const items = s.items
-        .filter((it) => !(it.kind === "tool" && remove.has(it.id)))
+        .filter((it) => !(it.kind === "tool" && remove.has(it.id)) && it.id !== discardedMessageId)
         .map((it) => {
           if (it.kind !== "tool") return it;
           const prior = journal.priorTools[it.id];
@@ -1376,7 +1172,8 @@ function applyStreamAttempt(s: State, e: WireEvent): State {
       return {
         ...endTurnModelActivity(s),
         items,
-        live,
+        live: discardedMessageId ? undefined : live,
+        currentAssistant: discardedMessageId ? undefined : s.currentAssistant,
         turnArgChars: journal.baselineTurnArgChars,
         streamAttemptJournal: undefined,
         lastStreamInterrupt: sa.reason
@@ -1477,6 +1274,17 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
     return s;
   }
   s = confirmPendingUser(s, e.submissionId);
+  if (e.kind === "user_message") {
+	if (e.source && e.source !== "executor") return s;
+    if (!e.messageId) return s;
+    const id = `m:${e.messageId}`;
+    const existing = s.items.find((item) => item.kind === "user" &&
+      (item.id === id || item.messageId === e.messageId || (e.submissionId && item.submissionId === e.submissionId)));
+    if (existing) {
+      return { ...s, items: s.items.map((item) => item === existing ? { ...existing, messageId: e.messageId } : item) };
+    }
+    return { ...s, items: [...s.items, { kind: "user", id, messageId: e.messageId, submissionId: e.submissionId, text: e.text ?? "" }] };
+  }
   if (e.kind === "mcp_surface_ready") {
     // Background readiness remains a no-op unless the sink explicitly
     // correlates it to this submit in the common preamble above.
@@ -1508,7 +1316,18 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
     return withRemoteProviderUnreachable(s, detail);
   }
   if (e.kind === "stream_attempt") {
+    if (e.streamAttempt?.action === "begin" && e.messageId) {
+      if (s.currentAssistant && s.currentAssistant !== `m:${e.messageId}`) s = settleCurrentAssistant(s);
+      s = ensureAssistant({ ...s, items: removeEmptyAssistantItems(s.items) }, e.messageId);
+    }
     return applyStreamAttempt(s, e);
+  }
+  if (e.messageId && (e.kind === "text" || e.kind === "reasoning" || e.kind === "message" || (e.kind === "tool_dispatch" && e.tool?.partial && !e.tool.parentId))) {
+    if (s.currentAssistant && s.currentAssistant !== `m:${e.messageId}`) {
+      s = settleCurrentAssistant(s);
+      s = { ...s, items: removeEmptyAssistantItems(s.items) };
+    }
+    s = ensureAssistant(s, e.messageId);
   }
   if (s.retry) s = { ...s, retry: undefined };
   switch (e.kind) {
@@ -2054,6 +1873,8 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
 
 export function reducer(s: State, a: Action): State {
   switch (a.type) {
+    case "transcript_snapshot": return transcriptSnapshotState(s, a.snapshot, historyMessagesToItems, (state, event) => applyEvent(state, event, a.remote), promptEventClock());
+    case "transcript_page": return transcriptPageState(s, a.snapshot, historyMessagesToItems);
     case "user": {
       const seq = a.seq !== undefined ? a.seq : s.seq;
       const userItemId = `u${seq}`;
@@ -2131,6 +1952,11 @@ export function reducer(s: State, a: Action): State {
       return withRemoteTurnInterrupted(s);
     }
     case "backend_status": {
+      if (s.transcriptProtocol === 1) {
+        if (a.runtimeEpoch && s.runtimeStatusEpoch && a.runtimeEpoch !== s.runtimeStatusEpoch) return s;
+        const backgroundJobs = Math.max(0, a.backgroundJobs ?? s.backgroundJobs ?? 0);
+        return backgroundJobs === s.backgroundJobs ? s : { ...s, backgroundJobs };
+      }
       const incomingEpoch = a.runtimeEpoch?.trim();
       const storedEpoch = s.runtimeStatusEpoch?.trim();
       if (runtimeStatusSnapshotIsStale(s, a)) return s;
@@ -2319,7 +2145,7 @@ export function reducer(s: State, a: Action): State {
       const retainedTail = liveTail.filter((item) => !duplicates.has(item.id));
       return {
         ...s,
-        items: compactArchivedToolItems([...a.items, ...retainedTail]),
+        items: compactArchivedToolItems([...preserveMountedUserIds(a.items, s.items), ...retainedTail]),
         historyPrefixCount: a.items.length,
         hydrateHistoryLoaded: true,
         hydratePlaceholderItems: undefined,
@@ -2342,7 +2168,7 @@ export function reducer(s: State, a: Action): State {
       const retainedPrefix = remove ? prefix.filter((item) => !remove.has(item.id)) : prefix;
       return {
         ...s,
-        items: compactArchivedToolItems([...a.items, ...rest]),
+        items: compactArchivedToolItems([...preserveMountedUserIds(a.items, s.items), ...rest]),
         historyPrefixCount: a.items.length + retainedPrefix.length,
         hydrateHistoryLoaded: true,
         hydratePlaceholderItems: undefined,
@@ -2452,7 +2278,13 @@ export function reducer(s: State, a: Action): State {
     case "reset": return { ...initialState, meta: metaWithoutCanonicalTodos(s.meta), context: { used: 0, window: s.context.window, sessionTokens: 0, compactRatio: s.context.compactRatio }, balance: s.balance, effort: s.effort, jobs: s.jobs, hydrating: s.hydrating, hydrateReason: s.hydrateReason, hydrateError: s.hydrateError, hydrateHistoryLoaded: s.hydrateHistoryLoaded, hydratePlaceholderItems: s.hydratePlaceholderItems, backendActivationPending: s.backendActivationPending, sessionGen: s.sessionGen + 1, promptEpoch: s.promptEpoch + 1 };
     case "context_panel_refresh": return { ...s, contextPanelSeq: s.contextPanelSeq + 1 };
     case "event": {
-      const next = applyEvent(s, a.e, a.remote);
+      let next = applyEvent(s, a.e, a.remote);
+      if (a.e.messageId && a.e.tool?.id && next.items !== s.items) {
+        const toolId = a.e.tool.id;
+        const prior = s.items.find((item) => item.kind === "tool" && item.id === toolId);
+        next = { ...next, items: next.items.map((item) => item.kind === "tool" && item.id === toolId && item !== prior
+          ? { ...item, messageId: a.e.messageId } : item) };
+      }
       return next.items.length > s.items.length
         ? { ...next, historyMutation: { seq: s.historyMutation.seq + 1, kind: "append" } }
         : next;
@@ -2739,6 +2571,11 @@ export function useController() {
   const historyOlderSeq = useRef(new Map<string, number>());
   const cancelHydrateSeq = useRef(new Map<string, number>());
   const turnEventProjector = useRef(new TurnEventProjector()).current;
+  const snapshotClient = useRef(new TranscriptSnapshotClient({
+    snapshot: (tabId, request) => app.TranscriptSnapshotForTab!(tabId, request),
+    page: (tabId, request) => app.TranscriptPageForTab!(tabId, request),
+    content: (tabId, request) => app.TranscriptContentForTab!(tabId, request),
+  }, turnEventProjector, (tabId) => getTranscriptStore().tabIsPinned(tabId))).current;
   const sessionLoadInFlight = useRef(new Map<string, { sessionPath: string; revision?: number; digest?: string; promise: Promise<void> }>());
   const transcriptSubscriptions = useRef(new Map<string, () => void>());
   const bumpMetaRefreshSeq = useCallback((tabId: string): number => {
@@ -2773,8 +2610,21 @@ export function useController() {
         });
       }
     });
-    transcriptSubscriptions.current.set(tabId, unsubscribe);
-  }, [dispatchTo]);
+    const unsubscribeContent = getTranscriptStore().registerContentResolver(tabId, async (entryId, field) => {
+      try {
+      const record = await resolveSnapshotItems(snapshotClient, tabId, entryId, () => statesRef.current.get(tabId), historyMessagesToItems,
+        (patches) => dispatchTo(tabId, { type: "history_items_patch", patches }));
+      return field === "reasoning" ? record?.message.reasoning : record?.message.content;
+      } catch (error) {
+        if (!(error instanceof StaleCut)) throw error;
+        const path = statesRef.current.get(tabId)?.meta?.sessionPath;
+        await snapshotClient.load(tabId, (snapshot) => dispatchTo(tabId, { type: "transcript_snapshot", snapshot }),
+          () => statesRef.current.get(tabId)?.meta?.sessionPath === path);
+        return undefined;
+      }
+    }, () => snapshotClient.installed(tabId));
+    transcriptSubscriptions.current.set(tabId, () => { unsubscribe(); unsubscribeContent(); });
+  }, [dispatchTo, snapshotClient]);
   const releaseTranscriptState = useCallback((tabId: string) => {
     // A released tab can still have an older-page request awaiting Wails. Keep
     // a tombstone generation so a later tab reusing the same id cannot make
@@ -2782,9 +2632,9 @@ export function useController() {
     historyOlderSeq.current.set(tabId, (historyOlderSeq.current.get(tabId) ?? 0) + 1);
     transcriptSubscriptions.current.get(tabId)?.();
     transcriptSubscriptions.current.delete(tabId);
-    turnEventProjector.release(tabId);
+    snapshotClient.release(tabId);
     getTranscriptStore().evictTab(tabId);
-  }, [turnEventProjector]);
+  }, [snapshotClient]);
   const sessionLoadCurrent = useCallback((tabId: string, seq: number): boolean => {
     return sessionLoadSeq.current.get(tabId) === seq;
   }, []);
@@ -2870,8 +2720,9 @@ export function useController() {
       const seq = bumpSessionLoadSeq(tabId);
       const hydrateStartedAt = Date.now();
       const skipHistory = Boolean(
-        options.skipHistory ||
-        (options.preserveCachedHistory && !resetSurface && hasReusableCachedTranscript(statesRef.current.get(tabId), sessionPath, sessionRevision, sessionDigest)),
+        (options.skipHistory ||
+        (options.preserveCachedHistory && !resetSurface && hasReusableCachedTranscript(statesRef.current.get(tabId), sessionPath, sessionRevision, sessionDigest))) &&
+        (typeof app.TranscriptSnapshotForTab !== "function" || snapshotClient.installed(tabId)),
       );
       const deferResetUntilHistory = Boolean(surfacePolicy === "preserve-current" && (options.deferResetUntilHistory ?? true) && resetSurface && !skipHistory);
       // Request seq alone cannot stop clear→mode-switch races: a load started
@@ -2911,7 +2762,12 @@ export function useController() {
       };
 
       const historyStartedAt = Date.now();
-      let projection = skipHistory
+      const modern = !skipHistory && typeof app.TranscriptSnapshotForTab === "function";
+      const snapshotLoaded = modern ? await loadTimed("transcript snapshot", () => snapshotClient.load(tabId, (snapshot) => {
+        runtimeEpochByTabRef.current.set(tabId, snapshot.identity.runtimeEpoch);
+        dispatchTo(tabId, { type: "transcript_snapshot", snapshot });
+      }, stillCurrent)) : false;
+      let projection = skipHistory || modern
         ? undefined
         : await loadTimed("history", () =>
             // Resident LRU only when the caller keeps cache; reset/no-cache re-fetch.
@@ -2924,7 +2780,7 @@ export function useController() {
           );
 
       if (!stillCurrent()) return;
-      if (!skipHistory && projection === undefined) {
+      if (!skipHistory && (modern ? !snapshotLoaded : projection === undefined)) {
         const errText = t("history.failedLoadHistory");
         dispatchTo(tabId, { type: "hydrate_error", reason, error: errText });
         // Hydration failure is not turn completion; keep any raced Ask/approval blocked.
@@ -3069,11 +2925,18 @@ export function useController() {
         sessionLoadInFlight.current.delete(tabId);
       }
     }
-  }, [bumpSessionLoadSeq, cancelHydrateCurrent, dispatchTo, loadMetaForTab, refreshBalanceForTab, sessionLoadCurrent]);
+  }, [bumpSessionLoadSeq, cancelHydrateCurrent, dispatchTo, loadMetaForTab, refreshBalanceForTab, sessionLoadCurrent, snapshotClient]);
 
   const resetTurnEventProjection = useCallback(async (tabId: string, replay: TurnEventReplayView): Promise<boolean> => {
     const state = statesRef.current.get(tabId);
     if (!state) return false;
+    if (typeof app.TranscriptSnapshotForTab === "function") {
+      const path = state.meta?.sessionPath;
+      return snapshotClient.load(tabId, (snapshot) => {
+        runtimeEpochByTabRef.current.set(tabId, snapshot.identity.runtimeEpoch);
+        dispatchTo(tabId, { type: "transcript_snapshot", snapshot });
+      }, () => statesRef.current.get(tabId)?.meta?.sessionPath === path);
+    }
     const sessionPath = state.meta?.sessionPath?.trim() ?? "";
     const expectedEpoch = replay.runtimeEpoch?.trim() ?? "";
     ensureTranscriptSubscription(tabId);
@@ -3118,7 +2981,7 @@ export function useController() {
       digest: projection.digest || undefined,
     });
     return true;
-  }, [dispatchTo, ensureTranscriptSubscription]);
+  }, [dispatchTo, ensureTranscriptSubscription, snapshotClient]);
 
   useEffect(() => {
     turnEventProjector.bindReset(resetTurnEventProjection);
@@ -3140,7 +3003,19 @@ export function useController() {
     const targetTabId = tabId || activeTabIdRef.current;
     if (!targetTabId) return false;
     const state = statesRef.current.get(targetTabId);
-    if (!state?.historyHasOlder || state.historyOlderLoading || state.running) return false;
+    if (!state?.historyHasOlder || state.historyOlderLoading) return false;
+    if (snapshotClient.installed(targetTabId)) {
+      dispatchTo(targetTabId, { type: "history_older_start" });
+      try {
+        const result = await snapshotClient.older(targetTabId, (snapshot) => dispatchTo(targetTabId, { type: "transcript_page", snapshot }));
+        if (result === "stale") return snapshotClient.load(targetTabId, (snapshot) => dispatchTo(targetTabId, { type: "transcript_snapshot", snapshot }));
+        return result === "loaded";
+      } catch (error) {
+        dispatchTo(targetTabId, { type: "history_older_error", error: errorMessage(error) });
+        return false;
+      }
+    }
+    if (state.running) return false;
     const sessionPath = state.meta?.sessionPath ?? "";
     const sessionRevision = state.meta?.sessionRevision ?? state.historyRevision;
     const sessionDigest = state.meta?.sessionDigest ?? state.historyDigest;
@@ -3215,7 +3090,7 @@ export function useController() {
       addBreadcrumb("tab.hydrate", `history older failed ${targetTabId}: ${errorMessage(err)}`);
       return false;
     }
-  }, [dispatchTo, ensureTranscriptSubscription]);
+  }, [dispatchTo, ensureTranscriptSubscription, snapshotClient]);
 
   const activeTabFromBackend = useCallback(async (): Promise<TabMeta | undefined> => {
     const tabs = asArray(await app.ListTabs().catch(() => [] as TabMeta[]));
@@ -3231,6 +3106,10 @@ export function useController() {
     const runtimeEpoch = tab.runtime?.epoch;
     const latestEventSeq = tab.turnEventSeq ?? 0;
     turnEventProjector.observeRuntime(tabId, runtimeEpoch, latestEventSeq, tab.turnReplayAfterSeq, foregroundRunning && Boolean(tab.turnId));
+    if (statesRef.current.get(tabId)?.transcriptProtocol === 1) {
+      dispatchTo(tabId, { type: "backend_status", running: foregroundRunning, backgroundJobs: tab.backgroundJobs, runtimeEpoch });
+      return Boolean(statesRef.current.get(tabId)?.running || statesRef.current.get(tabId)?.pendingPrompt);
+    }
     // Will the reducer reject this as a snapshot that predates the live prompt?
     // Computed on pre-dispatch state so we can schedule an authoritative
     // refetch when a stale idle snapshot is ignored.
@@ -3536,7 +3415,7 @@ export function useController() {
       uiPerfTracker.onStreamDispatch();
       for (const b of coalesceStreamDeltas(batch)) dispatchTo(b.tabId, { type: "stream_batch", segments: b.segments });
     });
-    const handleWireEvent = (e: WireEvent) => {
+    const receiveWireEvent = (e: WireEvent) => {
       // Untagged compatibility events belong to the tab that the backend has
       // actually activated, not the frontend's optimistic selection. During a
       // slow SetActiveTab these can differ, and routing to the optimistic tab
@@ -3550,10 +3429,15 @@ export function useController() {
       }
       const currentMeta = statesRef.current.get(targetTabId)?.meta;
       if (e.sessionGeneration !== undefined && (!currentMeta || currentMeta.sessionGeneration === undefined || e.sessionGeneration !== currentMeta.sessionGeneration)) return;
-      if (!turnEventProjector.acceptLive(targetTabId, e, acceptedEpoch)) return;
+      turnEventProjector.receiveLive(targetTabId, e, acceptedEpoch);
+    };
+    const handleWireEvent = (e: WireEvent) => {
+      const targetTabId = e.tabId;
+      if (!targetTabId) throw new Error("ordered event has no target tab");
+      snapshotClient.observeEvent(targetTabId, e);
       uiPerfTracker.onWireEvent(targetTabId, e.kind);
       if (TURN_ACTIVITY_KINDS.has(e.kind)) lastTurnActivityAtByTab.current.set(targetTabId, Date.now());
-      if (e.kind === "text" || e.kind === "reasoning") {
+      if (!e.seq && (e.kind === "text" || e.kind === "reasoning")) {
         if (e.submissionId) dispatchTo(targetTabId, { type: "send_confirmed", submissionId: e.submissionId });
         textBatch.push({ tabId: targetTabId, e });
       } else {
@@ -3581,7 +3465,7 @@ export function useController() {
       }
     };
     turnEventProjector.bind(handleWireEvent);
-    const off = onEvent(handleWireEvent);
+    const off = onEvent(receiveWireEvent);
 
     const offReady = onReady((readyTabId) => {
       const activeId = activeTabIdRef.current;
@@ -3601,6 +3485,8 @@ export function useController() {
     // rebuild (settings-wide) affects every known tab.
     const offRebuilt = onRuntimeRebuilt((rebuiltTabId, runtimeEpoch) => {
       if (rebuiltTabId) {
+        snapshotClient.release(rebuiltTabId);
+        if (typeof app.TranscriptSnapshotForTab === "function") turnEventProjector.beginSnapshot(rebuiltTabId);
         invalidateSharedQuery("MetaForTab", [rebuiltTabId]);
         if (runtimeEpoch) runtimeEpochByTabRef.current.set(rebuiltTabId, runtimeEpoch);
         dispatchTo(rebuiltTabId, { type: "controller_rebuilt" });
@@ -3609,6 +3495,8 @@ export function useController() {
           for (const id of Array.from(statesRef.current.keys())) runtimeEpochByTabRef.current.set(id, runtimeEpoch);
         }
         for (const id of Array.from(statesRef.current.keys())) {
+          snapshotClient.release(id);
+          if (typeof app.TranscriptSnapshotForTab === "function") turnEventProjector.beginSnapshot(id);
           invalidateSharedQuery("MetaForTab", [id]);
           dispatchTo(id, { type: "controller_rebuilt" });
         }
@@ -3656,7 +3544,7 @@ export function useController() {
       offTopicActivation();
       offTabMeta();
     };
-  }, [dispatchTo, handleTopicActivationEvent, loadSessionDataForTab, refreshBalanceForTab, refreshCheckpoints, refreshMetaForTab, syncActiveTabFromBackend, turnEventProjector]);
+  }, [dispatchTo, handleTopicActivationEvent, loadSessionDataForTab, refreshBalanceForTab, refreshCheckpoints, refreshMetaForTab, syncActiveTabFromBackend, turnEventProjector, snapshotClient]);
 
   // Track the visible tab in the transcript store: the active tab is pinned
   // out of LRU eviction. (In-flight loads of background tabs still complete
@@ -3666,7 +3554,8 @@ export function useController() {
   useEffect(() => {
     getTranscriptStore().noteActiveTab(activeTabId, previousStoreActiveTabRef.current);
     previousStoreActiveTabRef.current = activeTabId;
-  }, [activeTabId]);
+    snapshotClient.prune();
+  }, [activeTabId, snapshotClient]);
 
   // Keep shared all-source telemetry live between turn boundaries. Delivery
   // mode can complete dozens of provider requests inside one UI turn, while
@@ -4230,11 +4119,12 @@ export function useController() {
 
   const newSession = useCallback(async () => {
     const tabId = activeTabId;
+    let requestSeq: number | undefined;
     if (tabId) await waitForTabReady(tabId);
     if (tabId) {
       addBreadcrumb("session.new", `click ${tabId}`);
       bumpCheckpointRefreshSeq(tabId);
-      bumpSessionLoadSeq(tabId);
+      requestSeq = bumpSessionLoadSeq(tabId);
       dispatchTo(tabId, { type: "reset" });
       dispatchTo(tabId, { type: "hydrate_start", reason: "new-session" });
       addBreadcrumb("session.new", `visible-reset ${tabId}`);
@@ -4254,13 +4144,19 @@ export function useController() {
     }
     invalidateCache();
     if (tabId) {
-      dispatchTo(tabId, { type: "history", messages: [] });
+      if (typeof app.TranscriptSnapshotForTab === "function") {
+        ensureTranscriptSubscription(tabId);
+        try {
+          if (!(await snapshotClient.load(tabId, (snapshot) => dispatchTo(tabId, { type: "transcript_snapshot", snapshot }),
+            () => sessionLoadSeq.current.get(tabId) === requestSeq))) return;
+        } catch (error) { dispatchTo(tabId, { type: "hydrate_error", reason: "new-session", error: errorMessage(error) }); return; }
+      } else dispatchTo(tabId, { type: "history", messages: [] });
       dispatchTo(tabId, { type: "hydrate_done" });
       void refreshMetaForTab(tabId);
       app.ContextUsageForTab(tabId).then((context) => dispatchTo(tabId, { type: "context", context })).catch(() => {});
       void refreshCheckpoints(tabId);
     }
-  }, [activeTabId, bumpCheckpointRefreshSeq, bumpSessionLoadSeq, dispatchTo, loadSessionDataForTab, refreshCheckpoints, refreshMetaForTab, waitForTabReady]);
+  }, [activeTabId, bumpCheckpointRefreshSeq, bumpSessionLoadSeq, dispatchTo, ensureTranscriptSubscription, loadSessionDataForTab, refreshCheckpoints, refreshMetaForTab, snapshotClient, waitForTabReady]);
 
   const clearSession = useCallback(async () => {
     const tabId = activeTabId;
@@ -4283,6 +4179,7 @@ export function useController() {
       // Retire every resident projection for this tab so a mode switch cannot
       // preferResident-serve the destroyed transcript.
       getTranscriptStore().evictTab(tabId);
+      snapshotClient.release(tabId);
       const existing = statesRef.current.get(tabId)?.meta;
       const nextMeta = {
         ...(existing ?? { label: "", ready: true, eventChannel: "agent:event", cwd: "" }),
@@ -4294,9 +4191,16 @@ export function useController() {
       // Meta first so reset preserves the replacement identity.
       dispatchTo(tabId, { type: "optimistic_meta", meta: nextMeta });
       dispatchTo(tabId, { type: "reset" });
-      dispatchTo(tabId, { type: "history", messages: [] });
+      if (typeof app.TranscriptSnapshotForTab === "function") {
+        ensureTranscriptSubscription(tabId);
+        const seq = sessionLoadSeq.current.get(tabId);
+        try {
+          await snapshotClient.load(tabId, (snapshot) => dispatchTo(tabId, { type: "transcript_snapshot", snapshot }),
+            () => sessionLoadSeq.current.get(tabId) === seq);
+        } catch (error) { dispatchTo(tabId, { type: "hydrate_error", reason: "new-session", error: errorMessage(error) }); }
+      } else dispatchTo(tabId, { type: "history", messages: [] });
     }
-  }, [activeTabId, bumpCheckpointRefreshSeq, bumpSessionLoadSeq, dispatchTo, loadSessionDataForTab, waitForTabReady]);
+  }, [activeTabId, bumpCheckpointRefreshSeq, bumpSessionLoadSeq, dispatchTo, ensureTranscriptSubscription, loadSessionDataForTab, snapshotClient, waitForTabReady]);
 
   const listSessions = useCallback(async (): Promise<SessionMeta[]> => {
     const page = await app.ListHistorySessions({ scope: "all", workspaceRoot: "", status: "all", timeFilter: "all", query: "", cursor: "", limit: 200 });
@@ -4349,9 +4253,11 @@ export function useController() {
       if (!navigationCompletionCurrent(navigationSeq, "session.resume", targetTabId)) return terminal("superseded");
       const seq = bumpSessionLoadSeq(targetTabId);
       dispatchTo(targetTabId, { type: "hydrate_start", reason: "resume-session", placeholderItems });
-      let page: HistoryPage;
+      let page: HistoryPage | undefined;
       try {
-        page = tabId
+        if (typeof app.TranscriptSnapshotForTab === "function" && app.ResumeTranscriptSessionForTab) {
+          await app.ResumeTranscriptSessionForTab(targetTabId, path);
+        } else page = tabId
           ? await app.ResumeSessionPageForTab(tabId, path, HISTORY_PAGE_TURNS)
           : await app.ResumeSessionPage(path, HISTORY_PAGE_TURNS);
       } catch {
@@ -4359,8 +4265,14 @@ export function useController() {
         return failSessionNavigation(navigationSeq, targetTabId);
       }
       if (!navigationCompletionCurrent(navigationSeq, "session.resume", targetTabId) || !sessionLoadCurrent(targetTabId, seq)) return terminal("superseded");
-      dispatchTo(targetTabId, { type: "reset" });
-      dispatchTo(targetTabId, { type: "history_page", page, mode: "replace" });
+      if (typeof app.TranscriptSnapshotForTab === "function") {
+        ensureTranscriptSubscription(targetTabId);
+        if (!(await snapshotClient.load(targetTabId, (snapshot) => dispatchTo(targetTabId, { type: "transcript_snapshot", snapshot }),
+          () => isNavigationIntentCurrent(navigationSeq) && sessionLoadCurrent(targetTabId, seq)))) return terminal("superseded");
+      } else if (page) {
+        dispatchTo(targetTabId, { type: "reset" });
+        dispatchTo(targetTabId, { type: "history_page", page, mode: "replace" });
+      }
       dispatchTo(targetTabId, { type: "hydrate_done" });
       if (!(await reconcileSessionNavigationForTab(targetTabId, navigationSeq, seq))) return terminal("superseded");
       app.ContextUsageForTab(targetTabId).then((context) => dispatchTo(targetTabId, { type: "context", context })).catch(() => {});
@@ -4368,7 +4280,7 @@ export function useController() {
       return terminal("ready");
     })().catch(() => failSessionNavigation(navigationSeq, targetTabId));
     return { value: undefined, surfaceReady };
-  }, [activeTabId, beginActiveNavigation, bumpSessionLoadSeq, dispatchTo, failSessionNavigation, navigationCompletionCurrent, reconcileSessionNavigationForTab, refreshCheckpoints, requireRegisteredNavigationIntent, sessionLoadCurrent, snapshotNavigationSourceTab, waitForBackendActiveTab, waitForTabReady]);
+  }, [activeTabId, beginActiveNavigation, bumpSessionLoadSeq, dispatchTo, ensureTranscriptSubscription, failSessionNavigation, navigationCompletionCurrent, reconcileSessionNavigationForTab, refreshCheckpoints, requireRegisteredNavigationIntent, sessionLoadCurrent, snapshotClient, snapshotNavigationSourceTab, waitForBackendActiveTab, waitForTabReady]);
 
   const openChannelSession = useCallback((path: string, tabId: string, navigationIntentSeq?: number): NavigationResult<void> | undefined => {
     if (!tabId) return;
@@ -4384,16 +4296,24 @@ export function useController() {
       await waitForTabReady(tabId);
       if (!navigationCompletionCurrent(navigationSeq, "session.channel", tabId)) return terminal("superseded");
       const seq = bumpSessionLoadSeq(tabId);
-      let page: HistoryPage;
+      let page: HistoryPage | undefined;
       try {
-        page = await app.OpenChannelSessionPageForTab(tabId, path, HISTORY_PAGE_TURNS);
+        if (typeof app.TranscriptSnapshotForTab === "function" && app.OpenChannelTranscriptSessionForTab) {
+          await app.OpenChannelTranscriptSessionForTab(tabId, path);
+        } else page = await app.OpenChannelSessionPageForTab(tabId, path, HISTORY_PAGE_TURNS);
       } catch {
         if (!isNavigationIntentCurrent(navigationSeq) || !sessionLoadCurrent(tabId, seq)) return terminal("superseded");
         return failSessionNavigation(navigationSeq, tabId);
       }
       if (!navigationCompletionCurrent(navigationSeq, "session.channel", tabId) || !sessionLoadCurrent(tabId, seq)) return terminal("superseded");
-      dispatchTo(tabId, { type: "reset" });
-      dispatchTo(tabId, { type: "history_page", page, mode: "replace" });
+      if (typeof app.TranscriptSnapshotForTab === "function") {
+        ensureTranscriptSubscription(tabId);
+        if (!(await snapshotClient.load(tabId, (snapshot) => dispatchTo(tabId, { type: "transcript_snapshot", snapshot }),
+          () => isNavigationIntentCurrent(navigationSeq) && sessionLoadCurrent(tabId, seq)))) return terminal("superseded");
+      } else if (page) {
+        dispatchTo(tabId, { type: "reset" });
+        dispatchTo(tabId, { type: "history_page", page, mode: "replace" });
+      }
       dispatchTo(tabId, { type: "hydrate_done" });
       if (!(await reconcileSessionNavigationForTab(tabId, navigationSeq, seq))) return terminal("superseded");
       app.ContextUsageForTab(tabId).then((context) => dispatchTo(tabId, { type: "context", context })).catch(() => {});
@@ -4401,7 +4321,7 @@ export function useController() {
       return terminal("ready");
     })().catch(() => failSessionNavigation(navigationSeq, tabId));
     return { value: undefined, surfaceReady };
-  }, [beginActiveNavigation, bumpSessionLoadSeq, dispatchTo, failSessionNavigation, isNavigationIntentCurrent, navigationCompletionCurrent, reconcileSessionNavigationForTab, refreshCheckpoints, requireRegisteredNavigationIntent, sessionLoadCurrent, snapshotNavigationSourceTab, waitForTabReady]);
+  }, [beginActiveNavigation, bumpSessionLoadSeq, dispatchTo, ensureTranscriptSubscription, failSessionNavigation, isNavigationIntentCurrent, navigationCompletionCurrent, reconcileSessionNavigationForTab, refreshCheckpoints, requireRegisteredNavigationIntent, sessionLoadCurrent, snapshotClient, snapshotNavigationSourceTab, waitForTabReady]);
 
   const previewSession = useCallback(async (path: string): Promise<HistoryMessage[]> => asArray<HistoryMessage>(await app.PreviewSession(path).catch(() => [])), []);
   const deleteSession = useCallback((path: string) => app.DeleteSession(path).finally(() => invalidateCache()), []);

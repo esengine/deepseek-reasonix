@@ -5,6 +5,7 @@
 import type { DictKey } from "./en";
 
 export const zhTW: Record<DictKey, string> = {
+  "remote.legacyTranscriptSync": "舊版同步受限，重連可能遺漏或重複內容。",
   "settings.providerProtocolMismatch": "API 位址與所選協定不一致。",
   "settings.imageInputLabel": "圖片輸入",
   "settings.imageInputModeAria": "{model} 的圖片輸入模式",

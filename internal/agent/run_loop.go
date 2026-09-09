@@ -21,6 +21,7 @@ import (
 // available, and a failed recovery can still fall back to the complete first
 // response without re-running any tool.
 type streamedTurn struct {
+	messageID          string
 	text               string
 	reasoning          string
 	signature          string
@@ -42,6 +43,7 @@ type streamedTurn struct {
 
 func (s streamedTurn) assistantMessage() provider.Message {
 	return provider.Message{
+		ID:   s.messageID,
 		Role: provider.RoleAssistant, Content: s.text, ReasoningContent: s.reasoning,
 		ReasoningState: s.reasoningState, ThinkingBlocks: s.thinkingBlocks,
 		ReasoningSignature: s.signature, ReasoningID: s.reasoningID, ReasoningStatus: s.reasoningStatus,
@@ -150,10 +152,12 @@ func (a *Agent) beginRunTurn(ctx context.Context, input string, pinned pinnedRev
 		rawContent = a.turn.turnInput
 	}
 	userMessage := provider.Message{
+		ID:   turnUserMessageID(ctx, a.sess.conversation),
 		Role: provider.RoleUser, Origin: inputMessageOrigin(ctx), Content: input, RawContent: rawContent,
 		Images: userImages(ctx), VisionSummary: VisionSummaryFromContext(ctx), CreatedAt: userCreatedAt,
 	}
 	a.appendPinnedRevisionAndUser(ctx, pinned, userMessage)
+	emitAdmittedUserMessage(a.svc.sink, userMessage)
 
 	// The loop fields join the classification computed above rather than
 	// opening a second object: one turn, one turnRuntime. The zero values the
@@ -216,7 +220,7 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) (runErr err
 		// whole attempt lifecycle — stream retries must not rewrite session
 		// history mid-round, so the shape stays stable across body replays.
 		streamed := a.streamWithSamplingRecovery(ctx, step+1)
-		text, reasoning, signature, calls, responsesItems, serverSearch, usage := streamed.text, streamed.reasoning, streamed.signature, streamed.calls, streamed.responsesItems, streamed.serverSearch, streamed.usage
+		text, reasoning, calls, usage := streamed.text, streamed.reasoning, streamed.calls, streamed.usage
 		partialCalls, err := streamed.partialCalls, streamed.err
 		cacheDiagnostics := CompareShape(prevPrefixShape, prefixShape, usage, contentReasons)
 		a.attachSessionContextDiagnostics(&cacheDiagnostics)
@@ -250,20 +254,10 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) (runErr err
 		// archive. Most OpenAI-compatible backends do not replay it; providers
 		// with an explicit round-trip contract retain the raw provider text.
 		calls = a.withPreviewFileDiffs(ctx, calls)
-		a.sess.conversation.Add(provider.Message{
-			Role:               provider.RoleAssistant,
-			Content:            text,
-			ReasoningContent:   reasoning,
-			ReasoningSignature: signature,
-			ReasoningID:        streamed.reasoningID,
-			ReasoningStatus:    streamed.reasoningStatus,
-			ReasoningState:     streamed.reasoningState,
-			ThinkingBlocks:     streamed.thinkingBlocks,
-			ToolCalls:          calls,
-			ResponsesItems:     responsesItems,
-			ServerSearch:       serverSearch,
-			WorkDurationMs:     state.workDurationMs(),
-		})
+		assistant := streamed.assistantMessage()
+		assistant.ToolCalls = calls
+		assistant.WorkDurationMs = state.workDurationMs()
+		a.sess.conversation.Add(assistant)
 
 		if len(calls) == 0 {
 			cont, ferr := a.handleFinalResponse(ctx, state, text, reasoning, usage)
@@ -275,7 +269,7 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) (runErr err
 
 		if usage != nil && usage.FinishReason == "length" {
 			truncatedRounds++
-			if err := a.recordTruncatedToolResults(ctx, calls); err != nil {
+			if err := a.recordTruncatedToolResults(withMessageIdentity(ctx, streamed.messageID), calls); err != nil {
 				return err
 			}
 			if truncatedRounds > maxStreamRecoveries {
@@ -287,7 +281,7 @@ func (a *Agent) runToolLoop(ctx context.Context, state *turnRuntime) (runErr err
 
 		// Invariant: executeBatch only ever receives tool calls from a
 		// committed sampling attempt (clean terminal + response intercept).
-		cont, terr := a.handleToolRound(ctx, state, step, text, reasoning, calls, usage)
+		cont, terr := a.handleToolRound(withMessageIdentity(ctx, streamed.messageID), state, step, text, reasoning, calls, usage)
 		if !cont {
 			return terr
 		}
@@ -314,16 +308,19 @@ func (a *Agent) emitStreamAttempt(id string, action event.StreamAttemptAction, a
 		reason = provider.StreamInterruptReason(err)
 	}
 	a.svc.sink.Emit(event.Event{
-		Kind: event.StreamAttempt,
+		Kind:      event.StreamAttempt,
+		MessageID: id,
+		AttemptID: id,
 		StreamAttempt: event.StreamAttemptInfo{
 			ID: id, Action: action, Attempt: attempt, Max: maxSamplingAttempts, Reason: reason,
 		},
 	})
 }
 
-func newStreamAttemptID(attempt int) string {
-	// Host-local only: never persisted, never sent to the model.
-	return fmt.Sprintf("sa-%d-%d", attempt, time.Now().UnixNano())
+func newStreamAttemptID(_ int) string {
+	// A successful attempt retains this local identity when its message is
+	// committed. Failed attempts have distinct identities and cannot alias it.
+	return NewMessageID()
 }
 
 // streamRetrySleep is the body-retry backoff. Tests replace it with a no-op so

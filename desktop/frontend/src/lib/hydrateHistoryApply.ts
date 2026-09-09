@@ -203,6 +203,7 @@ export function hydratedHistoryApplyMode(
 type SignatureItem = {
   kind: string;
   id: string;
+  messageId?: string;
   text?: string;
   reasoning?: string;
   name?: string;
@@ -229,6 +230,14 @@ export function duplicateLiveItemIds(
   pageItems: readonly SignatureItem[],
   liveItems: readonly SignatureItem[],
 ): string[] {
+  // Stable backend identities are independent of where a page cuts the live
+  // turn. In particular page [A,B,C] already covers live [A,B]. Content equality
+  // cannot establish this relation: two messages may intentionally be equal.
+  const identity = (item: SignatureItem) => item.messageId ? `m:${item.messageId}` : item.id;
+  const isIdentified = (item: SignatureItem) => !!item.messageId || item.id.startsWith("m:");
+  const canonicalIds = new Set(pageItems.filter((item) => isIdentified(item) || item.kind === "tool").map(identity));
+  const identified = liveItems.filter((item) => canonicalIds.has(identity(item))).map((item) => item.id);
+  if (pageItems.some(isIdentified) || liveItems.some(isIdentified)) return identified;
   for (let k = Math.min(pageItems.length, liveItems.length); k > 0; k -= 1) {
     let same = true;
     for (let i = 0; i < k && same; i += 1) {

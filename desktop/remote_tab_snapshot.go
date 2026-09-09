@@ -71,6 +71,15 @@ func sanitizeRemoteHistory(body []byte) []byte {
 // RemoteTabSnapshot merges the serve's GET members in parallel. Only
 // /history is required; the optional members degrade to absent on failure.
 func (a *App) RemoteTabSnapshot(tabID string) (RemoteTabSnapshot, error) {
+	return a.remoteTabSnapshot(tabID, true)
+}
+
+// RemoteTabMetadata loads ancillary state without transferring transcript bodies.
+func (a *App) RemoteTabMetadata(tabID string) (RemoteTabSnapshot, error) {
+	return a.remoteTabSnapshot(tabID, false)
+}
+
+func (a *App) remoteTabSnapshot(tabID string, includeHistory bool) (RemoteTabSnapshot, error) {
 	client, base, err := a.remoteTabCommandClient(tabID)
 	if err != nil {
 		return RemoteTabSnapshot{}, err
@@ -100,6 +109,9 @@ func (a *App) RemoteTabSnapshot(tabID string) (RemoteTabSnapshot, error) {
 		"/commands":    &snap.Commands,
 		"/status":      &snap.Status,
 	} {
+		if path == "/history" && !includeHistory {
+			continue
+		}
 		wg.Add(1)
 		go func(path string, dst *json.RawMessage) {
 			defer wg.Done()
@@ -123,7 +135,7 @@ func (a *App) RemoteTabSnapshot(tabID string) (RemoteTabSnapshot, error) {
 	if historyErr != nil {
 		return RemoteTabSnapshot{}, historyErr
 	}
-	if len(snap.History) == 0 {
+	if includeHistory && len(snap.History) == 0 {
 		return RemoteTabSnapshot{}, fmt.Errorf("remote tab %q: empty history", tabID)
 	}
 	snap.History = sanitizeRemoteHistory(snap.History)

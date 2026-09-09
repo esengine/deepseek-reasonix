@@ -24,9 +24,9 @@ async function retryRemote<T>(load: () => Promise<T>, maxAttempts: number, cance
   }
 }
 
-export function loadRemoteStatusSnapshot(tabId: string, maxAttempts: number, cancelled: () => boolean, valid: (status: unknown) => boolean) {
+export function loadRemoteStatusSnapshot(tabId: string, maxAttempts: number, cancelled: () => boolean, valid: (status: unknown) => boolean, metadataOnly = false) {
   return retryRemote(async () => {
-    const snapshot = await app.RemoteTabSnapshot(tabId);
+    const snapshot = metadataOnly && app.RemoteTabMetadata ? await app.RemoteTabMetadata(tabId) : await app.RemoteTabSnapshot(tabId);
     const status = snapshot.status ?? await app.RemoteTabStatus(tabId);
     if (!valid(status)) throw new Error("remote status is incomplete");
     return [snapshot, status] as const;

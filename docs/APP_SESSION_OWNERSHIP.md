@@ -2,6 +2,9 @@
 
 [简体中文](APP_SESSION_OWNERSHIP.zh-CN.md)
 
+Display identity, ordered snapshots, paging and recovery are described in
+[Transcript projection](TRANSCRIPT_PROJECTION.md).
+
 Session actions capture their source when invoked. A later tab change cannot
 redirect a pending send, cancel, approval, model update, or navigation completion
 to the newly selected session. Layout-committed command registrations publish

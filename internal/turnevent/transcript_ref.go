@@ -4,10 +4,17 @@ package turnevent
 // schema-1 revision/digest pair, and for schema-2 sessions the head and leaf
 // message the turn ended on, which is known before the save lands.
 type transcriptSnapshot struct {
-	revision int64
-	digest   string
-	headID   string
-	leafID   string
+	revision     int64
+	digest       string
+	headID       string
+	leafID       string
+	rewriteEpoch uint64
+}
+
+func (l *Ledger) SetTranscriptRewriteEpoch(epoch uint64) {
+	l.mu.Lock()
+	l.transcript.rewriteEpoch = epoch
+	l.mu.Unlock()
 }
 
 func (l *Ledger) SetTranscriptSnapshot(revision int64, digest string) {

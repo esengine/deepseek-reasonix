@@ -51,6 +51,36 @@ func TestDisplayTurnBufferPreservesStreamingReplacementAndTools(t *testing.T) {
 	}
 }
 
+func TestDisplayTurnBufferMessageIdentityAndDiscardMatchRecovery(t *testing.T) {
+	events := []event.Event{
+		{Kind: event.StreamAttempt, MessageID: "failed", AttemptID: "failed", StreamAttempt: event.StreamAttemptInfo{ID: "failed", Action: event.StreamAttemptBegin}},
+		{Kind: event.Reasoning, MessageID: "failed", AttemptID: "failed", Text: "discard this"},
+		{Kind: event.Message, MessageID: "failed", AttemptID: "failed", Text: "rejected full response"},
+		{Kind: event.StreamAttempt, MessageID: "failed", AttemptID: "failed", StreamAttempt: event.StreamAttemptInfo{ID: "failed", Action: event.StreamAttemptDiscard}},
+		{Kind: event.Reasoning, MessageID: "a", AttemptID: "a", Text: "first thought"},
+		{Kind: event.ToolDispatch, MessageID: "a", Tool: event.Tool{ID: "call", Name: "read_file", Args: `{}`}},
+		{Kind: event.ToolResult, Tool: event.Tool{ID: "call", Name: "read_file", Output: "done"}},
+		{Kind: event.Reasoning, MessageID: "b", AttemptID: "b", Text: "second thought"},
+		{Kind: event.Message, MessageID: "a", AttemptID: "a", Reasoning: "first thought", Text: "first answer"},
+	}
+	var live, recovered displayTurnBuffer
+	for i, e := range events {
+		recordHistoryDisplayEvent(&live, e)
+		wire := eventwire.ToWire(e)
+		replay, ok := displayEventFromEnvelope(turnevent.Envelope{Kind: wire.Kind, Sequence: uint64(i + 1), Event: wire})
+		if !ok {
+			t.Fatalf("event %s is not replayable", wire.Kind)
+		}
+		recordHistoryDisplayEvent(&recovered, replay)
+	}
+	for name, buffer := range map[string]*displayTurnBuffer{"live": &live, "recovered": &recovered} {
+		rows := buffer.materialize()
+		if len(rows) != 3 || rows[0].MessageID != "a" || rows[0].Content != "first answer" || rows[0].Reasoning != "first thought" || len(rows[0].ToolCalls) != 1 || rows[2].MessageID != "b" || rows[2].Reasoning != "second thought" {
+			t.Fatalf("%s message ownership/discard mismatch: %+v", name, rows)
+		}
+	}
+}
+
 func TestDisplayTurnBufferStreamingAllocationsStayNearLinear(t *testing.T) {
 	const (
 		chunks    = 2_000

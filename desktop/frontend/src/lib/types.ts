@@ -15,8 +15,10 @@ import type { PinnedFileInfo } from "./pinnedContextBridge";
 import type { RecoveryLineageView } from "./sessionRecoveryTypes";
 export * from "./remoteTypes";
 export type { ContextBudgetInfo, ContextMaintenanceInfo, ContextMaintenanceReceipt, WireContextMaintenance } from "./contextMaintenanceTypes";
+export type { HistoryContentChunk, HistoryContentRef, HistoryEntry, HistorySlice, HistorySliceRequest, SessionClearResult } from "./historyTypes";
 export type { ProjectGroupsSnapshot, ProjectRuntimeTopic, ProjectTopicKey, ProjectTopicPage, ProjectTopicPageRequest, ProjectTreeChangedV2, ProjectTreeOrganizationBindings, ProjectTreeRuntimeSnapshot, ProjectTreeSnapshot, SessionCatalogBindings, SessionCatalogStatus, SessionGroup, SessionReference } from "./sessionCatalogTypes";
 export type EventKind =
+  | "user_message"
   | "turn_started"
   | "reasoning"
   | "text"
@@ -52,6 +54,7 @@ export type EventKind =
 export type StreamAttemptAction = "begin" | "discard" | "commit";
 export type TurnStatus = "queued" | "in_progress" | "waiting_user" | "cancelling" | "completed" | "interrupted" | "failed" | "protocol_failed";
 export interface TurnEventEnvelope {
+  sessionId?: string;
   turnId: string;
   seq: number;
   status: TurnStatus | string;
@@ -388,6 +391,10 @@ export interface MemoryCitation {
 }
 
 export interface WireEvent extends RecoveryEventFields {
+	sessionId?: string;
+	source?: string;
+	messageId?: string;
+	attemptId?: string;
 	receipt?: WireCompletionReceipt;
 	readPause?: import("./readPause").WireReadPause;
   kind: EventKind;
@@ -815,6 +822,12 @@ export interface ChangedFileInfo {
 
 // Bound-method payloads (desktop/app.go).
 export interface HistoryMessage {
+	historyTurn?: number;
+	recordId?: string;
+	attemptId?: string;
+	submissionId?: string;
+	source?: string;
+	messageId?: string;
 	completionReceipt?: WireCompletionReceipt;
 	completionSummary?: WireCompletionSummary;
 	turnId?: string;
@@ -849,6 +862,11 @@ export interface HistoryMessage {
 }
 
 export interface HistoryToolCall {
+	partial?: boolean;
+	pending?: boolean;
+	parentId?: string;
+	argChars?: number;
+	startedAt?: number;
   id: string;
   name: string;
   arguments: string;
@@ -871,67 +889,6 @@ export interface HistoryPage {
   hasOlder: boolean;
   revision?: number;
   digest?: string;
-}
-
-// ── Windowed history paging (desktop/history_slice.go) ──────────────────────
-// HistorySliceForTab pages toward older history with an opaque cursor; the
-// first call uses cursor "" for the newest page. Entry IDs are stable for the
-// life of a session revision (s<file>:r<epoch>:m<msgIndex>:o<subOrder>).
-
-export interface HistorySliceRequest {
-  cursor: string; // "" = newest page; pass nextCursor to page older
-  turns?: number;
-  entries?: number;
-  bytes?: number;
-}
-
-// HistoryContentRef marks a string field replaced inline by a ≤4KiB preview;
-// the full value is fetchable in chunks via HistoryContentForTab.
-export interface HistoryContentRef {
-  entryId: string;
-  field: string; // content|reasoning|submitText|detail|code|summary|archive|toolResultError|toolArguments|toolSubject|toolSummary|toolDiff
-  size: number;
-  chunks: number;
-  toolCallId?: string;
-  revision: number;
-  revKnown?: boolean;
-  digest: string;
-}
-
-export interface HistoryEntry {
-  entryId: string;
-  turn: number; // 1-based visible turn (0 = before the first turn)
-  order: number; // absolute provider-message index
-  message: HistoryMessage;
-  refs: HistoryContentRef[];
-}
-
-export interface SessionClearResult { sessionPath: string; sessionRevision?: number; sessionDigest?: string; sessionGeneration: number }
-
-export interface HistorySlice {
-  entries: HistoryEntry[];
-  nextCursor: string; // toward older; empty when none
-  hasOlder: boolean;
-  totalTurns: number;
-  startTurn: number;
-  endTurn: number;
-  stale: boolean; // cursor bound to an older session revision: discard + reload
-  revision: number;
-  revisionKnown?: boolean;
-  digest?: string;
-  // Diagnostic read path: index|scan|event-log|live-index|live-fallback.
-  source?: string;
-  error?: string; // failed read; empty entries alone are not an error
-}
-
-export interface HistoryContentChunk {
-  entryId: string;
-  field: string;
-  chunk: number;
-  chunks: number;
-  data: string;
-  done: boolean;
-  stale: boolean;
 }
 
 // ── Two-phase topic activation (desktop/topic_activation.go) ────────────────

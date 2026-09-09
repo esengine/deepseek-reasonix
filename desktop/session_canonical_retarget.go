@@ -102,6 +102,10 @@ func (a *App) continuePathForMissingParent(ctx context.Context, catalog *session
 }
 
 func (a *App) resumeSessionPageForTab(tabID, path string, limit int) (HistoryPage, error) {
+	return a.resumeSessionForTranscript(tabID, path, limit, true)
+}
+
+func (a *App) resumeSessionForTranscript(tabID, path string, limit int, includeHistory bool) (HistoryPage, error) {
 	tab, ctrl := a.tabAndCtrlByID(tabID)
 	if tab == nil || ctrl == nil {
 		return HistoryPage{}, fmt.Errorf("tab is not ready")
@@ -126,6 +130,9 @@ func (a *App) resumeSessionPageForTab(tabID, path string, limit int) (HistoryPag
 		}
 	}
 	a.setTabReadOnly(tab.ID, false)
+	if !includeHistory {
+		return HistoryPage{}, nil
+	}
 	return a.HistoryPageForTab(tab.ID, 0, limit), nil
 }
 

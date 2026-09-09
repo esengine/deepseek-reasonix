@@ -1136,12 +1136,8 @@ func (t *WorkspaceTab) syncTelemetryToSession(sessionPath string) {
 func (t *WorkspaceTab) resetDisplayTurn() {
 	state := t.displayBufferState()
 	state.mu.Lock()
-	if len(state.planner.messages) == 0 {
-		state.planner.tools = nil
-	}
-	if len(state.executor.messages) == 0 {
-		state.executor.tools = nil
-	}
+	state.planner.ResetToolsIfEmpty()
+	state.executor.ResetToolsIfEmpty()
 	state.mu.Unlock()
 }
 
@@ -1228,42 +1224,6 @@ func recoverPendingTurnProjections(tab *WorkspaceTab, ctrl control.SessionAPI) {
 				}
 			},
 		})
-	}
-}
-
-func ensureDisplayAssistant(buffer *displayTurnBuffer) *bufferedHistoryMessage {
-	if n := len(buffer.messages); n > 0 && buffer.messages[n-1].message.Role == "assistant" {
-		return buffer.messages[n-1]
-	}
-	message := &bufferedHistoryMessage{message: HistoryMessage{Role: "assistant"}}
-	buffer.messages = append(buffer.messages, message)
-	return message
-}
-
-func ensureDisplayAssistantForTool(buffer *displayTurnBuffer) *bufferedHistoryMessage {
-	if n := len(buffer.messages); n > 0 && buffer.messages[n-1].message.Role == "assistant" && !buffer.messages[n-1].content.hasNonWhitespace() {
-		return buffer.messages[n-1]
-	}
-	message := &bufferedHistoryMessage{message: HistoryMessage{Role: "assistant"}}
-	buffer.messages = append(buffer.messages, message)
-	return message
-}
-
-func updateBufferedHistoryToolCallSummary(messages []*bufferedHistoryMessage, callID, output string) {
-	if callID == "" {
-		return
-	}
-	for _, v := range slices.Backward(messages) {
-		for j := range v.message.ToolCalls {
-			call := &v.message.ToolCalls[j]
-			if call.ID != callID {
-				continue
-			}
-			if call.Summary == "" {
-				call.Summary = historyToolSummary(call.Name, call.Arguments, output)
-			}
-			return
-		}
 	}
 }
 

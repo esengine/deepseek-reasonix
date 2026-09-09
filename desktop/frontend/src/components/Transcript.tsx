@@ -100,6 +100,7 @@ export type TranscriptProps = {
   revealSignal?: number;
   hydrating?: boolean;
   hasOlderHistory?: boolean;
+  stableHistoryPaging?: boolean;
   historyStartTurn?: number;
   historyTotalTurns?: number;
   loadingOlderHistory?: boolean;
@@ -120,7 +121,7 @@ export function Transcript(props: TranscriptProps) {
     onEditPrompt, onRewind, checkpoints = EMPTY_CHECKPOINTS, actionPending = false,
     rewindDisabled = false, running = false, questionNavigator = true,
     welcomeVariant = "default", creationMode = false, actionHoverMenus = false,
-    rewindSignal = 0, revealSignal = 0, hydrating = false, hasOlderHistory = false,
+    rewindSignal = 0, revealSignal = 0, hydrating = false, hasOlderHistory = false, stableHistoryPaging = false,
     historyStartTurn = 0, historyTotalTurns = 0, loadingOlderHistory = false,
     olderHistoryError, onLoadOlderHistory, turnStartAt, contentRevision = 0,
     invocationMetadata = EMPTY_INVOCATION_METADATA, historyMutation,
@@ -256,7 +257,7 @@ export function Transcript(props: TranscriptProps) {
   const questionNavigatorRef = useRef<TranscriptQuestionNavigatorHandle>(null);
   const history = useMemo(() => new TranscriptHistoryRequest(transcriptKernel), [transcriptKernel]);
   const requestOlder = useTranscriptCommand((turn?: number, trigger: HistoryLoadTrigger = "viewport-user") => {
-    if (!onLoadOlderHistory || !hasOlderHistory || loadingOlderHistory || running) return Promise.resolve(false);
+    if (!onLoadOlderHistory || !hasOlderHistory || loadingOlderHistory || (running && !stableHistoryPaging)) return Promise.resolve(false);
     if (trigger !== "question-jump" && trigger !== "retry") beginStructural("prepend");
     return history.load(() => onLoadOlderHistory(turn, trigger));
   });
@@ -336,14 +337,14 @@ export function Transcript(props: TranscriptProps) {
   const autoFillRef = useRef({ surface: "", pages: 0 });
   useEffect(() => {
     if (autoFillRef.current.surface !== surfaceKey) autoFillRef.current = { surface: surfaceKey, pages: 0 };
-    if (hydrating || !hasOlderHistory || loadingOlderHistory || olderHistoryError || running || autoFillRef.current.pages >= 3) return;
+    if (hydrating || !hasOlderHistory || loadingOlderHistory || olderHistoryError || (running && !stableHistoryPaging) || autoFillRef.current.pages >= 3) return;
     return transcriptKernel.afterCurrentGenerationPaint(() => {
       const geometry = snapshot();
       if (!geometry || geometry.clientHeight <= 0 || geometry.scrollHeight > geometry.clientHeight + 4) return;
       autoFillRef.current.pages += 1;
       void requestOlder(undefined, "auto-fill");
     });
-  }, [hasOlderHistory, hydrating, snapshot, loadingOlderHistory, olderHistoryError, projection.completedBlocks.length, requestOlder, running, surfaceKey, transcriptKernel]);
+  }, [hasOlderHistory, hydrating, snapshot, loadingOlderHistory, olderHistoryError, projection.completedBlocks.length, requestOlder, running, stableHistoryPaging, surfaceKey, transcriptKernel]);
 
   const showQuestionNav = questionNavigator && totalQuestions >= QUESTION_NAV_MIN_COUNT;
   const selectionSnapshot = useSyncExternalStore(transcriptSelectionStore.subscribe, transcriptSelectionStore.getSnapshot, transcriptSelectionStore.getSnapshot);
@@ -423,7 +424,7 @@ export function Transcript(props: TranscriptProps) {
           <div className="transcript__scrollbar-thumb" style={{ top: creationScrollbar.thumbTop, height: creationScrollbar.thumbHeight } as CSSProperties} onPointerDown={handleCreationScrollbarThumbPointerDown} />
         </div>}
         {!empty && showQuestionNav && <Suspense fallback={null}><TranscriptQuestionNavigator ref={questionNavigatorRef} kernel={transcriptKernel}
-          requestOlder={requestOlder} loadingOlderHistory={loadingOlderHistory} running={running} loadedByTurn={loadedByTurn}
+          requestOlder={requestOlder} loadingOlderHistory={loadingOlderHistory} running={running && !stableHistoryPaging} loadedByTurn={loadedByTurn}
           jump={jumpToLoadedQuestion} questions={questions} totalQuestions={totalQuestions} activeTurn={activeQuestion} /></Suspense>}
         {!empty && <button type="button" className="transcript__jump-bottom" hidden={!jumpBottomVisible} onClick={() => { endStaleGesture(); scrollToBottom(); }} aria-label={t("transcript.jumpToBottom")} title={t("transcript.jumpToBottom")}><ArrowDown size={18} strokeWidth={2.2} aria-hidden="true" /></button>}
         {FrontendDiagnosticsPanel && <Suspense fallback={null}><FrontendDiagnosticsPanel scrollElement={scrollElement} totalRows={allRows.length} /></Suspense>}

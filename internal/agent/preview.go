@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"reasonix/internal/event"
 	"reasonix/internal/provider"
 )
 
@@ -203,6 +204,14 @@ func UserMessageText(msg provider.Message) string {
 		return strings.TrimSpace(msg.RawContent)
 	}
 	return UserPreviewText(msg.Content)
+}
+
+// emitAdmittedUserMessage publishes the display identity of a persisted
+// user-authored turn message. Host-injected messages stay silent.
+func emitAdmittedUserMessage(sink event.Sink, user provider.Message) {
+	if IsUserAuthoredTurnMessage(user) {
+		sink.Emit(event.Event{Kind: event.UserMessage, MessageID: user.ID, Text: UserMessageText(user)})
+	}
 }
 
 // migrateLegacyProviderContent canonicalizes both historical user-turn shapes:

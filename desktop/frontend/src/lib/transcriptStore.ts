@@ -43,6 +43,7 @@ import {
   type Item,
 } from "./useController";
 import { historyNoticeItems } from "./controllerNotices";
+import { resolveTranscriptEntryAlias, TranscriptContentResolverRegistry } from "./transcriptContentResolver";
 import type {
   HistoryContentChunk,
   HistoryContentRef,
@@ -208,7 +209,7 @@ function convertRecord(
   const pendingPositional: number[] = [];
   const matches = new Map<number, string>(priorMatches);
   const m = rec.message;
-  const id = `he:${rec.entryId}`;
+  const id = m.messageId && (m.role === "assistant" || m.role === "user") ? `m:${m.messageId}` : `he:${rec.entryId}`;
 
   if (m.role === "system") return { items, claims, unresolvedIds, pendingPositional, matches };
   if (m.role === "phase") {
@@ -369,6 +370,10 @@ function applyResolvedField(rec: TranscriptRecord, ref: HistoryContentRef, data:
 }
 
 export class TranscriptStore {
+  private readonly contentResolvers = new TranscriptContentResolverRegistry();
+  registerContentResolver(tabId: string, resolve: (entryId: string, field: string) => Promise<string | undefined>, enabled: () => boolean = () => true): () => void {
+    return this.contentResolvers.register(tabId, resolve, enabled);
+  }
   private readonly backend: TranscriptBackend;
   private readonly maxResidentSessions: number;
   private readonly historyBodyBudgetBytes: number;
@@ -424,7 +429,11 @@ export class TranscriptStore {
   }
 
   private isPinned(session: SessionTranscript): boolean {
-    const pins = this.tabPins.get(session.tabId);
+    return this.tabIsPinned(session.tabId);
+  }
+
+  tabIsPinned(tabId: string): boolean {
+    const pins = this.tabPins.get(tabId);
     return Boolean(pins?.live || pins?.active);
   }
 
@@ -873,6 +882,9 @@ export class TranscriptStore {
    * chunk marks the ref stale and keeps the inline preview.
    */
   async requestFullContent(tabId: string, entryId: string, field: string): Promise<string | undefined> {
+    const resolver = this.contentResolvers.active(tabId);
+    if (resolver) return resolver.resolve(entryId, field);
+    entryId = resolveTranscriptEntryAlias(this.sessions.values(), tabId, entryId);
     const session = this.sessionForEntry(tabId, entryId);
     const rec = session?.byId.get(entryId);
     if (!session || !rec) return undefined;
@@ -923,6 +935,9 @@ export class TranscriptStore {
    */
   requestEntryFullContent(tabId: string | undefined, entryId: string): void {
     if (!tabId) return;
+    const resolver = this.contentResolvers.active(tabId);
+    if (resolver) { void resolver.resolve(entryId, "content").catch(() => {}); return; }
+    entryId = resolveTranscriptEntryAlias(this.sessions.values(), tabId, entryId);
     const session = this.sessionForEntry(tabId, entryId);
     const rec = session?.byId.get(entryId);
     if (!session || !rec) return;

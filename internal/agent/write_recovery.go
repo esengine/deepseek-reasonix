@@ -89,7 +89,7 @@ func (a *Agent) recordTruncatedToolResults(ctx context.Context, calls []provider
 	for _, call := range calls {
 		outcome := toolOutcome{output: "error: tool was not executed because the model output reached its length limit; regenerate complete arguments", errMsg: "truncated tool arguments"}
 		a.storeBatchToolResult(ctx, call, outcome)
-		if err := a.emitBatchToolResult(call, outcome, 0, 0, false, time.Time{}); err != nil {
+		if err := a.emitBatchToolResult(ctx, call, outcome, 0, 0, false, time.Time{}); err != nil {
 			return err
 		}
 	}

@@ -62,6 +62,7 @@ type Envelope struct {
 	TranscriptRevision int64            `json:"transcriptRevision,omitempty"`
 	TranscriptDigest   string           `json:"transcriptDigest,omitempty"`
 	HeadID             string           `json:"headId,omitempty"`
+	RewriteEpoch       uint64           `json:"rewriteEpoch,omitempty"`
 	LeafMessageID      string           `json:"leafMessageId,omitempty"`
 	CreatedAt          int64            `json:"createdAt"`
 	Event              eventwire.Event  `json:"event"`
@@ -143,30 +144,6 @@ type routingMetadata struct {
 
 // MetricsSnapshot contains counters only; no event content, ids or paths leave
 // the ledger through this surface.
-type MetricsSnapshot struct {
-	RawEvents             uint64
-	StreamRecords         uint64
-	BytesWritten          uint64
-	ReplayEvents          uint64
-	ReplayBytes           uint64
-	ReplayResets          uint64
-	Compactions           uint64
-	CompactionFailures    uint64
-	BytesBeforeCompact    uint64
-	BytesAfterCompact     uint64
-	TornTails             uint64
-	WriteFailures         uint64
-	ProjectionRetries     uint64
-	OpenCount             uint64
-	SyncCount             uint64
-	CloseCount            uint64
-	AppendLatencyBuckets  [5]uint64
-	ReplayLatencyBuckets  [5]uint64
-	CompactLatencyBuckets [5]uint64
-	FileSizeBytes         int64
-	UnconfirmedTurns      int
-}
-
 // Ledger serializes sequence allocation, file I/O, projection acknowledgement
 // and checkpoint replacement for exactly one session actor lane.
 type Ledger struct {
@@ -346,7 +323,8 @@ func (l *Ledger) Begin() (string, error) {
 	}
 	l.active, l.status, l.terminal = id, event.TurnQueued, false
 	l.turnStartSeq, l.turnStarted = l.nextSeq, time.Now().UnixMilli()
-	l.routing, l.nextRouting = l.nextRouting, routingMetadata{}
+	l.routing = l.nextRouting
+	l.nextRouting = routingMetadata{runtimeEpoch: l.routing.runtimeEpoch}
 	if l.routing.submissionID != "" {
 		l.submissionTurns[l.routing.submissionID] = id
 	}
@@ -360,6 +338,20 @@ func (l *Ledger) SetRoutingMetadata(runtimeEpoch, submissionID string) {
 	}
 	l.mu.Lock()
 	l.nextRouting = routingMetadata{runtimeEpoch: runtimeEpoch, submissionID: submissionID}
+	l.mu.Unlock()
+}
+
+// SetRuntimeEpoch binds a newly installed runtime without changing a queued
+// submission identity. Active turns retain the routing captured by Begin.
+func (l *Ledger) SetRuntimeEpoch(runtimeEpoch string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.nextRouting.runtimeEpoch = runtimeEpoch
+}
+
+func (l *Ledger) SetSubmissionID(submissionID string) {
+	l.mu.Lock()
+	l.nextRouting.submissionID = submissionID
 	l.mu.Unlock()
 }
 
@@ -456,6 +448,34 @@ func (l *Ledger) Append(e event.Event, status event.TurnStatus) (event.Event, bo
 	return l.appendLocked(e, status)
 }
 
+// AppendEnvelope returns the exact committed envelope under the append lock.
+// Consumers can project it before publication without reconstructing routing
+// from a later read (which may already belong to the next submission).
+func (l *Ledger) AppendEnvelope(e event.Event, status event.TurnStatus) (event.Event, Envelope, bool, error) {
+	if l == nil {
+		return e, Envelope{}, false, errors.New("turn event ledger is unavailable")
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	stamped, ok, err := l.appendLocked(e, status)
+	if err != nil || !ok || stamped.Sequence == 0 {
+		return stamped, Envelope{}, ok, err
+	}
+	if n := len(l.records); n > 0 && l.records[n-1].Sequence == stamped.Sequence {
+		return stamped, l.records[n-1], true, nil
+	}
+	// In-memory sessions deliberately have no WAL records, but use the same
+	// projection protocol and routing captured by this lock.
+	kind, _ := eventwire.KindName(stamped.Kind)
+	return stamped, Envelope{SchemaVersion: schemaVersion, SessionID: l.sessionID,
+		TurnID: stamped.TurnID, Sequence: stamped.Sequence, ItemID: stamped.ItemID,
+		AttemptID: stamped.AttemptID, RuntimeEpoch: l.routing.runtimeEpoch,
+		SubmissionID: l.routing.submissionID, Source: stamped.Source, Kind: kind,
+		Status: stamped.Status, CreatedAt: time.Now().UnixMilli(), Event: eventwire.ToWire(stamped),
+		TranscriptDigest: l.transcript.digest, TranscriptRevision: l.transcript.revision,
+		HeadID: l.transcript.headID, LeafMessageID: l.transcript.leafID, RewriteEpoch: l.transcript.rewriteEpoch}, true, nil
+}
+
 func (l *Ledger) appendLocked(e event.Event, status event.TurnStatus) (event.Event, bool, error) {
 	if l.poisoned != nil {
 		return e, false, l.unavailableLocked()
@@ -475,6 +495,7 @@ func (l *Ledger) appendLocked(e event.Event, status event.TurnStatus) (event.Eve
 	}
 	status = next
 	e.TurnID, e.Sequence, e.Status = l.active, l.nextSeq, status
+	e.SessionID, e.RuntimeEpoch, e.SubmissionID = l.sessionID, l.routing.runtimeEpoch, l.routing.submissionID
 	if l.path == "" {
 		l.nextSeq++
 		l.status = status
@@ -485,7 +506,7 @@ func (l *Ledger) appendLocked(e event.Event, status event.TurnStatus) (event.Eve
 	}
 
 	w := eventwire.ToWire(e)
-	attemptID := ""
+	attemptID := e.AttemptID
 	if e.Kind == event.StreamAttempt {
 		attemptID = e.StreamAttempt.ID
 	} else if e.Tool.AttemptID != "" {
@@ -499,7 +520,8 @@ func (l *Ledger) appendLocked(e event.Event, status event.TurnStatus) (event.Eve
 		Source: e.Source,
 		Kind:   kind, Status: status, TranscriptRevision: l.transcript.revision,
 		TranscriptDigest: l.transcript.digest, HeadID: l.transcript.headID, LeafMessageID: l.transcript.leafID,
-		CreatedAt: time.Now().UnixMilli(), Event: w,
+		RewriteEpoch: l.transcript.rewriteEpoch,
+		CreatedAt:    time.Now().UnixMilli(), Event: w,
 	}
 	var line []byte
 	if l.writeVersion == legacySchemaVersion {
@@ -911,46 +933,6 @@ func (l *Ledger) Close() error {
 		return l.poisonLocked(err)
 	}
 	return l.maybeCompactLocked(true)
-}
-
-func (l *Ledger) MetricsSnapshot() MetricsSnapshot {
-	if l == nil {
-		return MetricsSnapshot{}
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	out := l.metrics
-	out.FileSizeBytes = l.fileSize
-	out.UnconfirmedTurns = len(l.pendingProjectionsLocked())
-	return out
-}
-
-func (l *Ledger) DrainMetrics() MetricsSnapshot {
-	if l == nil {
-		return MetricsSnapshot{}
-	}
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	out := l.metrics
-	out.FileSizeBytes = l.fileSize
-	out.UnconfirmedTurns = len(l.pendingProjectionsLocked())
-	l.metrics = MetricsSnapshot{}
-	return out
-}
-
-func latencyBucket(elapsed time.Duration) int {
-	switch {
-	case elapsed < time.Millisecond:
-		return 0
-	case elapsed < 5*time.Millisecond:
-		return 1
-	case elapsed < 20*time.Millisecond:
-		return 2
-	case elapsed < 100*time.Millisecond:
-		return 3
-	default:
-		return 4
-	}
 }
 
 func (l *Ledger) readAndRepairLocked() (parsedLedger, error) {

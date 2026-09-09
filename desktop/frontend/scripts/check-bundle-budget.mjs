@@ -311,7 +311,10 @@ for (const path of localeChunks) {
   // 64606 / 65349 B, so both dialect ceilings ratchet to the next tenth.
   // Model-application copy on the read-pause base measures 64734 / 65499 B,
   // adding 128 / 150 B. Retain only the next one-decimal ceiling.
-  const budget = name.startsWith("zh-TW-") ? 64.0 * 1024 : 63.3 * 1024;
+  // The legacy-transcript degradation notice adds one short string per
+  // dialect: zh-TW measures 65551 B (64.015 KiB) while zh stays at 64793 B
+  // under its existing ceiling. Ratchet only the zh-TW ceiling one decimal.
+  const budget = name.startsWith("zh-TW-") ? 64.1 * 1024 : 63.3 * 1024;
   assertBudget(`${name} gzip`, gzipBytes(path), budget);
 }
 
@@ -445,6 +448,10 @@ const rawInitialBytes = [...initialJS, ...initialCSS, ...appShellCSS]
 // measure 2488853 B. Keep the next tenth; gzip, CSS, and chunk limits unchanged.
 // Combined model-settings and read-evidence integration measures 2492541 B,
 // adding 3688 B (0.148%) over the base. Retain the next one-decimal ceiling.
-const rawInitialBudgetKiB = 2_434.2;
+// The unified transcript projection (snapshot client/state, content resolver,
+// extracted history-items and remote-status owners) adds a measured 24.5 KiB
+// raw on the initial path; gzip stays inside its existing budget. The merged
+// path measures 2458.7 KiB raw; retain 0.1 KiB of build headroom.
+const rawInitialBudgetKiB = 2_458.8;
 assertBudget("initial raw JavaScript and CSS", rawInitialBytes, rawInitialBudgetKiB * 1024);
 assertBudget("largest initial JavaScript chunk raw", largestInitialJSRaw, 1_000 * 1024);

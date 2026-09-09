@@ -5,6 +5,7 @@
 import type { DictKey } from "./en";
 
 export const zh: Record<DictKey, string> = {
+  "remote.legacyTranscriptSync": "旧版远程服务同步受限，重连可能导致内容缺失或重复。",
   // 通用动词 / 框架
   "common.close": "关闭",
   "settings.providerProtocolMismatch": "API 地址与所选协议不一致。",

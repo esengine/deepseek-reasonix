@@ -13,6 +13,7 @@ import (
 	"reasonix/internal/event"
 	"reasonix/internal/evidence"
 	"reasonix/internal/sessioninbox"
+	"reasonix/internal/transcript"
 	"reasonix/internal/turnevent"
 )
 
@@ -31,9 +32,17 @@ type turnEventDurableSink struct{ owner *turnEventSink }
 
 // turnEventState has an independent lock so ledger I/O never holds c.mu.
 type turnEventState struct {
-	mu     sync.RWMutex
-	ledger *turnevent.Ledger
-	err    error
+	mu                         sync.RWMutex
+	ledger                     *turnevent.Ledger
+	err                        error
+	projection                 *transcript.Projection
+	projectionErr              error
+	commitMu                   sync.Mutex
+	persistMu                  sync.Mutex
+	projectionPath             string
+	pendingCheckpoint          *transcript.Checkpoint
+	projectionPersistedThrough uint64
+	projectionWriteErr         error
 }
 
 func newTurnEventSink(inner event.Sink, c *Controller) *turnEventSink {
@@ -186,20 +195,7 @@ func (s *turnEventSink) persistAndPublish(e event.Event) error {
 		status = event.TurnWaitingUser
 	case event.TurnDone:
 		status = terminalTurnStatus(e)
-		if s.c.executor != nil && s.c.executor.Session() != nil {
-			session := s.c.executor.Session()
-			digest, digestErr := session.ContentDigest()
-			if digestErr != nil {
-				slog.Warn("controller: compute terminal transcript digest", "err", digestErr)
-			} else {
-				ledger.SetTranscriptSnapshot(int64(session.TranscriptVersion()), digest)
-			}
-			if ref, ok := session.Head(); ok {
-				ledger.SetTranscriptHead(ref.HeadID, session.LeafID())
-			} else {
-				ledger.SetTranscriptHead("", "")
-			}
-		}
+		s.captureTerminalTranscriptSnapshot(ledger)
 	case event.TurnStatusChanged:
 		// The emitter supplied the exact transition in e.Status.
 	}
@@ -211,21 +207,70 @@ func (s *turnEventSink) persistAndPublish(e event.Event) error {
 	if e.WriteIntent {
 		return nil
 	}
-	stamped, ok, err := ledger.Append(e, status)
+	// No frontend callback runs while commitMu is held. Prompt publication
+	// can synchronously reenter this sink to append PromptAnswered.
+	stamped, envelope, ok, err := s.commitEnvelope(ledger, e, status)
 	if err != nil {
 		return err
 	}
 	if !ok {
 		return nil
 	}
+	projectionSaved := true
+	if e.Kind == event.TurnDone {
+		s.c.captureTranscriptCheckpoint(ledger, envelope.TranscriptDigest)
+		if err := s.c.persistTranscriptCheckpoint(ledger); err != nil {
+			projectionSaved = false
+			slog.Warn("controller: persist transcript display checkpoint", "err", err)
+		}
+	}
 	s.c.refreshRuntimeState(stamped)
 	s.publishInner(stamped)
-	if e.Kind == event.TurnDone && !ledger.ProjectionAckRequired() {
+	if e.Kind == event.TurnDone && !ledger.ProjectionAckRequired() && projectionSaved {
 		if err := ledger.AcknowledgeProjection(stamped.TurnID); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s *turnEventSink) captureTerminalTranscriptSnapshot(ledger *turnevent.Ledger) {
+	if s.c.executor == nil || s.c.executor.Session() == nil {
+		return
+	}
+	session := s.c.executor.Session()
+	_, _, rewrite := session.DisplayBaseline()
+	ledger.SetTranscriptRewriteEpoch(rewrite)
+	digest, digestErr := session.ContentDigest()
+	if digestErr != nil {
+		slog.Warn("controller: compute terminal transcript digest", "err", digestErr)
+	} else {
+		ledger.SetTranscriptSnapshot(int64(session.TranscriptVersion()), digest)
+	}
+	if ref, ok := session.Head(); ok {
+		ledger.SetTranscriptHead(ref.HeadID, session.LeafID())
+	} else {
+		ledger.SetTranscriptHead("", "")
+	}
+}
+
+func (s *turnEventSink) commitEnvelope(ledger *turnevent.Ledger, e event.Event, status event.TurnStatus) (event.Event, turnevent.Envelope, bool, error) {
+	s.c.turnEvents.commitMu.Lock()
+	stamped, envelope, ok, err := ledger.AppendEnvelope(e, status)
+	if err == nil && ok && stamped.Sequence > 0 {
+		s.c.turnEvents.mu.RLock()
+		projection := s.c.turnEvents.projection
+		s.c.turnEvents.mu.RUnlock()
+		if projection != nil {
+			if projectionErr := projection.Apply(envelope); projectionErr != nil {
+				s.c.turnEvents.mu.Lock()
+				s.c.turnEvents.projectionErr = projectionErr
+				s.c.turnEvents.mu.Unlock()
+			}
+		}
+	}
+	s.c.turnEvents.commitMu.Unlock()
+	return stamped, envelope, ok, err
 }
 
 func (s *turnEventDurableSink) Emit(e event.Event) {
@@ -387,6 +432,16 @@ func (c *Controller) rebindTurnEvents(sessionPath string) {
 	previous := c.turnEvents.ledger
 	c.turnEvents.ledger = ledger
 	c.turnEvents.err = nil
+	c.turnEvents.projection = nil
+	c.turnEvents.projectionErr = nil
+	c.turnEvents.projectionPath = sessionPath
+	c.turnEvents.pendingCheckpoint = nil
+	c.turnEvents.projectionPersistedThrough = 0
+	c.turnEvents.projectionWriteErr = nil
+	c.turnEvents.mu.Unlock()
+	projection, projectionErr := c.restoreTranscriptProjection(sessionPath, ledger)
+	c.turnEvents.mu.Lock()
+	c.turnEvents.projection, c.turnEvents.projectionErr = projection, projectionErr
 	c.turnEvents.mu.Unlock()
 	if previous != nil && previous != ledger {
 		if closeErr := previous.Close(); closeErr != nil {
@@ -466,6 +521,7 @@ func (c *Controller) SetTurnEventRoutingMetadata(runtimeEpoch, submissionID stri
 		ledger.RequireProjectionAck(true)
 		ledger.SetRoutingMetadata(runtimeEpoch, submissionID)
 	}
+	c.BindTranscriptRuntimeEpoch(runtimeEpoch)
 }
 
 // TurnEventsAfter returns the durable lifecycle suffix used by reconnecting
@@ -490,6 +546,9 @@ func (c *Controller) AcknowledgeTurnProjection(turnID string) error {
 	ledger := c.turnEventLedger()
 	if ledger == nil {
 		return nil
+	}
+	if err := c.persistTranscriptCheckpoint(ledger); err != nil {
+		return err
 	}
 	return ledger.AcknowledgeProjection(turnID)
 }

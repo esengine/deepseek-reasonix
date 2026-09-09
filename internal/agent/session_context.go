@@ -103,7 +103,15 @@ func (a *Agent) AppendTurnContext(ctx context.Context) bool {
 // user message in one Session.AddBatch. This keeps mid-turn autosave from
 // persisting a context-only admission boundary.
 func (a *Agent) AppendTurnContextAndUser(ctx context.Context, user provider.Message) bool {
-	return a.appendTurnContextAndMessages(ctx, user)
+	if a == nil || a.sess.session() == nil {
+		return false
+	}
+	if user.ID == "" {
+		user.ID = turnUserMessageID(ctx, a.sess.session())
+	}
+	appendedContext := a.appendTurnContextAndMessages(ctx, user)
+	emitAdmittedUserMessage(a.svc.sink, user)
+	return appendedContext
 }
 
 func (a *Agent) appendTurnContextAndMessages(ctx context.Context, messages ...provider.Message) bool {

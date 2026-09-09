@@ -105,7 +105,8 @@ const (
 	ExtensionStatus
 	// StreamAttempt marks the local lifecycle of one sampling attempt within a
 	// model round (StreamAttempt payload: begin | discard | commit). IDs are
-	// host-local only — never persisted or sent to the model. Appended last to
+	// local transcript identities — persisted in the event ledger, never sent
+	// to the model. Appended last to
 	// keep earlier Kind values wire-stable; older clients ignore unknown kinds.
 	StreamAttempt
 	// ContextMaintenance reports a free tool-result maintenance or a durable
@@ -138,6 +139,9 @@ const (
 	SessionChanged
 	// ReadStatus upserts one logical read's delivery state instead of per page.
 	ReadStatus
+	// UserMessage binds an admitted user bubble to its persisted message ID.
+	// Text is display text; provider-only framing must never be emitted here.
+	UserMessage
 	// KindCount is a sentinel one past the last real Kind. New event kinds must
 	// be inserted above it so completeness tests cover them automatically.
 	KindCount
@@ -343,95 +347,6 @@ type MCPInteraction struct {
 	TurnID          string
 }
 
-// Extension surface kind values carried by ExtensionSurfacePayload.Kind. They
-// mirror the extension protocol's structured surface kinds; "request" is
-// reserved for stage-8b request surfaces (stage 8a routes blocking prompts
-// through the ordinary AskRequest channel instead).
-const (
-	ExtensionSurfaceStatus       = "status"
-	ExtensionSurfaceCard         = "card"
-	ExtensionSurfaceForm         = "form"
-	ExtensionSurfaceNotification = "notification"
-	ExtensionSurfaceRequest      = "request"
-)
-
-// ExtensionSurfacePayload carries one extension sidecar's structured UI
-// contribution for the ExtensionSurface / ExtensionStatus kinds. The structs
-// mirror the Extension Protocol v2 UI payload DTOs field-for-field so any
-// frontend can render them with native widgets; the protocol stays
-// structured-only (no HTML/CSS/JS/URLs). All user-visible strings are already
-// credential-redacted by the host UI hub before the event is emitted. Exactly
-// one sub-struct is set, selected by Kind.
-type ExtensionSurfacePayload struct {
-	PluginID     string
-	SurfaceID    string
-	SessionID    string
-	Generation   uint64
-	Kind         string // status | card | form | notification (request reserved)
-	Status       *ExtensionStatusView
-	Card         *ExtensionCardView
-	Form         *ExtensionFormView
-	Notification *ExtensionNotificationView
-}
-
-// ExtensionStatusView is a one-line status contribution (mirrors the
-// protocol's UIStatusPayload).
-type ExtensionStatusView struct {
-	Label    string
-	Detail   string
-	Severity string // info | warn | error
-	Progress *float64
-}
-
-// ExtensionKeyValue is one labelled value row in a card (mirrors UIKeyValue).
-type ExtensionKeyValue struct {
-	Key   string
-	Value string
-}
-
-// ExtensionActionRef renders a button invoking a declared extension action
-// (mirrors UIActionRef).
-type ExtensionActionRef struct {
-	ActionID string
-	Label    string
-}
-
-// ExtensionCardView is a rich read-only surface (mirrors UICardPayload).
-type ExtensionCardView struct {
-	Title    string
-	Markdown string
-	Text     string
-	Fields   []ExtensionKeyValue
-	Progress *float64
-	Actions  []ExtensionActionRef
-}
-
-// ExtensionFormField is one input row of a form surface (mirrors UIFormField).
-type ExtensionFormField struct {
-	Key      string
-	Label    string
-	Kind     string // confirm | input | select | multiselect
-	Options  []string
-	Default  any
-	Required bool
-}
-
-// ExtensionFormView is an editable surface; submissions return to the
-// extension through the UI hub (mirrors UIFormPayload).
-type ExtensionFormView struct {
-	Title   string
-	Message string
-	Fields  []ExtensionFormField
-}
-
-// ExtensionNotificationView is a transient toast-style message (mirrors
-// UINotificationPayload).
-type ExtensionNotificationView struct {
-	Title    string
-	Body     string
-	Severity string // info | warn | error
-}
-
 // Compaction carries a context-compaction pass for the CompactionStarted /
 // CompactionDone events. On CompactionStarted only Trigger is set. On
 // CompactionDone, Messages/Summary/Archive are filled in (an aborted pass leaves
@@ -506,6 +421,11 @@ const (
 // for Kind; the others are zero.
 type Event struct {
 	Kind             Kind
+	MessageID        string                    // local identity shared by streaming and persisted messages
+	AttemptID        string                    // owning sampling attempt; never provider-visible
+	SessionID        string                    // durable display routing, stamped after append
+	RuntimeEpoch     string                    // originating controller incarnation
+	SubmissionID     string                    // exact optimistic submit correlation
 	PromptKind       string                    // interactive prompt kind for lifecycle events
 	TurnID           string                    // stable id of the owning top-level turn
 	Sequence         uint64                    // monotonic session-local event sequence

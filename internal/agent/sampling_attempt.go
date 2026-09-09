@@ -13,7 +13,8 @@ import (
 // RequestCount, while pre-wire failures do not invent a billable request.
 func (a *Agent) runSamplingAttempt(ctx context.Context, turn int, sink event.Sink, frozen *samplingRequest, attemptID string) streamedTurn {
 	before := provider.RequestAttemptCount(ctx)
-	result := a.streamWithFrozen(ctx, turn, sink, frozen, attemptID)
+	result := a.streamWithFrozen(ctx, turn, event.WithMessageIdentity(sink, attemptID, attemptID), frozen, attemptID)
+	result.messageID = attemptID
 	if result.err == nil && isEmptyStreamResult(result.text, result.reasoning, result.calls, result.responsesItems, result.serverSearch) {
 		result.err = fmt.Errorf("%w: model returned a completed response with no content", provider.ErrEmptyResponse)
 	}

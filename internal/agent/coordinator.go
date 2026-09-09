@@ -224,6 +224,18 @@ func (c *Coordinator) PlannerAgent() *Agent {
 // SetReasoningLanguage updates both agents in two-model mode. The raw planner
 // path receives controller-composed input directly, but a tool-enabled planner
 // owns its own Agent and must clear stale zh/en preferences on live changes.
+// SetSink is an idle-runtime binding operation. Planner and executor output
+// must enter the same durable projection before either reaches a frontend.
+func (c *Coordinator) SetSink(sink event.Sink) {
+	if c == nil {
+		return
+	}
+	c.sink = sink
+	if c.executor != nil {
+		c.executor.SetSink(sink)
+	}
+}
+
 func (c *Coordinator) SetReasoningLanguage(lang string) {
 	if c == nil {
 		return
@@ -320,6 +332,11 @@ func (c *Coordinator) SetPlannerPlanApprover(g PlannerPlanApprover) {
 // Run plans with the planner model, then hands the plan to the executor.
 func (c *Coordinator) Run(ctx context.Context, input string) error {
 	c.sink.Emit(event.Event{Kind: event.TurnStarted})
+	userID := turnUserMessageID(ctx, c.executor.Session())
+	ctx = withUserMessageIdentity(ctx, c.executor.Session(), userID)
+	if inputMessageOrigin(ctx) != provider.MessageOriginHost {
+		c.sink.Emit(event.Event{Kind: event.UserMessage, MessageID: userID, Text: RawUserInput(ctx, input), Source: event.UsageSourceExecutor})
+	}
 	// A turn starts owing nothing to the last one's plan; deliverPlan installs
 	// this turn's plan only once the executor is actually about to run it.
 	c.executor.SetPlanContract(nil)
@@ -365,7 +382,7 @@ func (c *Coordinator) deliverPlan(ctx context.Context, input string, outcome pla
 	}
 	runWithPlanApproval := func() error {
 		if c.plannerPlanApprover == nil {
-			c.persistExecutorNoOp(ctx, input, plan+"\n\n"+plannerPlanAwaitingApprovalNote)
+			c.persistExecutorNoOp(ctx, input, plan+"\n\n"+plannerPlanAwaitingApprovalNote, outcome.messageID)
 			c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: i18n.M.PlannerPlanAwaitingApproval, Source: event.UsageSourcePlanner})
 			return nil
 		}
@@ -378,13 +395,13 @@ func (c *Coordinator) deliverPlan(ctx context.Context, input string, outcome pla
 			// The user declined the plan. Persist the exchange like the no-op
 			// path does — a denied turn must survive session save/reload, and
 			// the note tells the next executor turn that nothing ran.
-			c.persistExecutorNoOp(ctx, input, plan+"\n\n"+plannerPlanNotApprovedNote)
+			c.persistExecutorNoOp(ctx, input, plan+"\n\n"+plannerPlanNotApprovedNote, outcome.messageID)
 			c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: i18n.M.PlannerPlanNotApproved, Source: event.UsageSourcePlanner})
 		}
 		return err
 	}
 	if decision.Route == PlannerRoutePlanOnly {
-		c.persistExecutorNoOp(ctx, input, plan+"\n\n"+plannerPlanOnlyNote)
+		c.persistExecutorNoOp(ctx, input, plan+"\n\n"+plannerPlanOnlyNote, outcome.messageID)
 		c.sink.Emit(event.Event{Kind: event.Notice, Level: event.LevelInfo, Text: i18n.M.PlannerPlanOnly, Source: event.UsageSourcePlanner})
 		return nil
 	}
@@ -410,7 +427,7 @@ const (
 	plannerPlanSubmittedClosure     = "Plan submitted to the host."
 )
 
-func (c *Coordinator) persistExecutorNoOp(ctx context.Context, input, plan string) {
+func (c *Coordinator) persistExecutorNoOp(ctx context.Context, input, plan, messageID string) {
 	if c == nil || c.executor == nil || c.executor.sess.conversation == nil {
 		return
 	}
@@ -421,18 +438,20 @@ func (c *Coordinator) persistExecutorNoOp(ctx context.Context, input, plan strin
 		rawContent = rawInput
 	}
 	c.executor.AppendTurnContextAndUser(ctx, provider.Message{
-		Role: provider.RoleUser, Origin: provider.MessageOriginUser, Content: providerContent, RawContent: rawContent,
+		ID:   turnUserMessageID(ctx, c.executor.Session()),
+		Role: provider.RoleUser, Origin: inputMessageOrigin(ctx), Content: providerContent, RawContent: rawContent,
 		Images: userImages(ctx), CreatedAt: time.Now().UnixMilli(),
 	})
-	c.executor.sess.conversation.Add(provider.Message{Role: provider.RoleAssistant, Content: plan})
+	c.executor.sess.conversation.Add(provider.Message{ID: messageID, Role: provider.RoleAssistant, Content: plan})
 }
 
 // plannerOutcome is one planning turn's result. A submitted plan is the
 // contract; text is what the user and the executor read — rendered from the
 // submitted plan.
 type plannerOutcome struct {
-	text string
-	plan plancontract.Plan
+	messageID string
+	text      string
+	plan      plancontract.Plan
 }
 
 // requestsApproval reports whether execution should stop for the user. A
@@ -483,8 +502,9 @@ func (c *Coordinator) planWithTools(ctx context.Context, input string) (plannerO
 			c.plannerSess.Add(provider.Message{Role: provider.RoleAssistant, Content: plannerPlanSubmittedClosure})
 		}
 		text := plancontract.Render(plan)
-		c.sink.Emit(event.Event{Kind: event.Text, Text: text, Source: event.UsageSourcePlanner})
-		return plannerOutcome{text: text, plan: plan}, nil
+		messageID := NewMessageID()
+		c.sink.Emit(event.Event{Kind: event.Text, MessageID: messageID, Text: text, Source: event.UsageSourcePlanner})
+		return plannerOutcome{messageID: messageID, text: text, plan: plan}, nil
 	}
 	// No submitted plan: the turn failed the contract. Roll back so the next
 	// planner turn does not start from a dangling user message, and surface a
@@ -509,7 +529,7 @@ var _ event.OptionalSinkCapabilities = (*plannerEventSink)(nil)
 
 func (s *plannerEventSink) Emit(e event.Event) {
 	switch e.Kind {
-	case event.TurnStarted, event.TurnDone:
+	case event.TurnStarted, event.TurnDone, event.UserMessage:
 		return
 	default:
 		if e.Source == "" {

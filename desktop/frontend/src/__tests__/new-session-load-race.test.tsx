@@ -163,7 +163,12 @@ window.runtime = {
   EventsOn: (name: string, cb: (...data: unknown[]) => void) => {
     if (name === "agent:event") eventHandlers.push(cb as (event: WireEvent) => void);
     if (name === "runtime:rebuilt") rebuiltHandlers.push(cb as (tabId?: string, runtimeEpoch?: string) => void);
-    return () => {};
+    return () => {
+      const events = eventHandlers.indexOf(cb as (event: WireEvent) => void);
+      if (events >= 0) eventHandlers.splice(events, 1);
+      const rebuilt = rebuiltHandlers.indexOf(cb as (tabId?: string, runtimeEpoch?: string) => void);
+      if (rebuilt >= 0) rebuiltHandlers.splice(rebuilt, 1);
+    };
   },
   BrowserOpenURL: () => {},
 };
@@ -602,6 +607,75 @@ eq(controller?.state.meta?.workspaceRoot, targetProjectB, "guarded startup sync 
 await act(async () => {
   guardRoot.unmount();
 });
+
+// Exercise the production hook's modern entry points: none may install an
+// independently fetched legacy prefix or leave the new runtime paused forever.
+let modernEpoch = "modern-start";
+let modernPath = "/sessions/modern-start.jsonl";
+let modernSnapshots = 0;
+let legacyReads = 0;
+let modernAdoptions = 0;
+const modernReplace = (name: string) => {
+  modernEpoch = name;
+  modernPath = `/sessions/${name}.jsonl`;
+  for (const handler of rebuiltHandlers) handler("tab-a", modernEpoch);
+};
+const legacyRead = async () => { legacyReads++; throw new Error("modern hydration read legacy history"); };
+window.go.main.App = {
+  RegisterNavigationIntent: async () => {},
+  ListTabs: async () => [tabMeta({ runtime: { phase: "ready", epoch: modernEpoch } })],
+  MetaForTab: async () => meta({ sessionPath: modernPath, runtime: { phase: "ready", epoch: modernEpoch } }),
+  ContextUsageForTab: async () => context,
+  EffortForTab: async () => effort,
+  BalanceForTab: async () => balance,
+  JobsForTab: async () => jobs,
+  CheckpointsForTab: async () => checkpoints,
+  HistoryCheckpointTurnsForTab: async () => [],
+  HistoryForTab: legacyRead, HistoryPageForTab: legacyRead, HistorySliceForTab: legacyRead,
+  ResumeSessionPageForTab: legacyRead, OpenChannelSessionPageForTab: legacyRead,
+  ReplayPendingPrompts: async () => {},
+  ReplayPendingPromptsForTab: async () => {},
+  TranscriptSnapshotForTab: async () => {
+    modernSnapshots++;
+    return { protocolVersion: 1, snapshotId: modernEpoch, identity: { sessionId: modernEpoch, headId: modernEpoch, rewriteEpoch: 0, runtimeEpoch: modernEpoch },
+      projectionRevision: 0, coveredThroughSeq: 0, records: [], activeRecords: [], runtime: { status: "completed", pendingEvents: [] },
+      activeAttempts: [], before: 0, hasOlder: false, totalRecords: 0, totalTurns: 0, stale: false };
+  },
+  NewSessionForTab: async () => modernReplace("modern-new"),
+  ClearSessionForTab: async () => { modernReplace("modern-clear"); return { sessionPath: modernPath, sessionGeneration: 2 }; },
+  ResumeTranscriptSessionForTab: async () => { modernAdoptions++; modernReplace("modern-resume"); },
+  OpenChannelTranscriptSessionForTab: async () => { modernAdoptions++; modernReplace("modern-channel"); },
+} as Partial<AppBindings> as AppBindings;
+controller = undefined;
+const modernRoot = createRoot(rootEl);
+await act(async () => { modernRoot.render(<Probe />); await flushPromises(); });
+await waitFor("modern startup snapshot", () => controller?.state.transcriptProtocol === 1);
+const verifyModernSuffix = async (label: string) => {
+  await act(async () => {
+    for (const handler of eventHandlers) handler({ kind: "user_message", tabId: "tab-a", runtimeEpoch: modernEpoch,
+      sessionId: modernEpoch, seq: 1, messageId: `${modernEpoch}-user`, text: label });
+    for (const handler of eventHandlers) handler({ kind: "text", tabId: "tab-a", runtimeEpoch: modernEpoch,
+      sessionId: modernEpoch, seq: 2, messageId: `${modernEpoch}-assistant`, text: "suffix" });
+    await flushPromises();
+  });
+  eq(controller?.state.items.filter((item) => item.kind === "user").length, 1, `${label} accepts one user after its snapshot`);
+  eq(controller?.state.live?.text, "suffix", `${label} accepts the ordered live suffix`);
+};
+await verifyModernSuffix("startup");
+await act(async () => { await controller?.newSession(); await flushPromises(); });
+eq(controller?.state.items.length, 0, "modern new session installs its empty cut");
+await verifyModernSuffix("new");
+await act(async () => { await controller?.clearSession(); await flushPromises(); });
+eq(controller?.state.items.length, 0, "modern clear installs its empty cut");
+await verifyModernSuffix("clear");
+await act(async () => { await controller?.resumeSession("/sessions/modern-resume.jsonl", "tab-a")?.surfaceReady; await flushPromises(); });
+await verifyModernSuffix("resume");
+await act(async () => { await controller?.openChannelSession("/sessions/modern-channel.jsonl", "tab-a")?.surfaceReady; await flushPromises(); });
+await verifyModernSuffix("channel");
+eq(modernAdoptions, 2, "resume and channel use adoption without a legacy history payload");
+eq(modernSnapshots, 5, "each modern entry point obtains one authoritative cut");
+eq(legacyReads, 0, "modern entry points never read legacy history");
+await act(async () => { modernRoot.unmount(); });
 dom.window.close();
 
 console.log(`\n${passed} passed, ${failed} failed, ${passed + failed} total`);

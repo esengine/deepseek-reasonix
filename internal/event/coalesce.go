@@ -45,6 +45,8 @@ type coalescer struct {
 	mu          sync.Mutex
 	kind        Kind
 	source      string
+	messageID   string
+	attemptID   string
 	buf         strings.Builder
 	pending     bool
 	timer       *time.Timer
@@ -72,6 +74,8 @@ func isStreamDelta(e Event) bool {
 	probe := e
 	probe.Text = ""
 	probe.Source = ""
+	probe.MessageID = ""
+	probe.AttemptID = ""
 	return reflect.DeepEqual(probe, Event{Kind: e.Kind})
 }
 
@@ -109,7 +113,7 @@ func (c *coalescer) enqueue(e Event, checked bool) error {
 		}
 		return nil
 	}
-	if c.pending && (c.kind != e.Kind || c.source != e.Source) {
+	if c.pending && (c.kind != e.Kind || c.source != e.Source || c.messageID != e.MessageID || c.attemptID != e.AttemptID) {
 		c.enqueueFlushLocked()
 	}
 	if !c.pending && time.Since(c.lastForward) >= c.window {
@@ -125,6 +129,8 @@ func (c *coalescer) enqueue(e Event, checked bool) error {
 		c.pending = true
 		c.kind = e.Kind
 		c.source = e.Source
+		c.messageID = e.MessageID
+		c.attemptID = e.AttemptID
 		if c.timer == nil {
 			c.timer = time.AfterFunc(c.window, c.flush)
 		} else {
@@ -154,7 +160,7 @@ func (c *coalescer) enqueueFlushLocked() {
 		return
 	}
 	c.timer.Stop()
-	c.queue = append(c.queue, coalescedEvent{event: Event{Kind: c.kind, Text: c.buf.String(), Source: c.source}})
+	c.queue = append(c.queue, coalescedEvent{event: Event{Kind: c.kind, Text: c.buf.String(), Source: c.source, MessageID: c.messageID, AttemptID: c.attemptID}})
 	c.buf.Reset()
 	c.pending = false
 	c.source = ""

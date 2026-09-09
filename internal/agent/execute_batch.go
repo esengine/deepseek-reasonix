@@ -182,9 +182,9 @@ func (a *Agent) executeBatch(ctx context.Context, turn *turnRuntime, calls []pro
 		a.finalizeIncompleteReadOutcome(ctx, outcomes[i].incompleteRead, &outcomes[i])
 		a.finalizeReadDelivery(ctx, calls[i], &outcomes[i])
 		results[i] = outcomes[i].output
-		a.commitBatchCallResolution(calls[i])
+		a.commitBatchCallResolution(ctx, calls[i])
 		a.storeBatchToolResult(ctx, calls[i], outcomes[i])
-		if err := a.emitBatchToolResult(calls[i], outcomes[i], durations[i], startedAt[i], ranParallel[i], batchStart); err != nil {
+		if err := a.emitBatchToolResult(ctx, calls[i], outcomes[i], durations[i], startedAt[i], ranParallel[i], batchStart); err != nil {
 			batchErrOnce.Do(func() { batchErr = fmt.Errorf("persist tool result %s: %w", calls[i].ID, err) })
 		}
 		if surfaceWriters[i] || (outcomes[i].resolved && !outcomes[i].resolvedReadOnly) {
@@ -373,12 +373,12 @@ func (a *Agent) executeBatch(ctx context.Context, turn *turnRuntime, calls []pro
 	}
 }
 
-func (a *Agent) commitBatchCallResolution(call provider.ToolCall) {
+func (a *Agent) commitBatchCallResolution(ctx context.Context, call provider.ToolCall) {
 	if call.ResolvedReadOnly == nil {
 		return
 	}
 	a.sess.conversation.UpdateToolCallResolution(call)
-	a.emitResolvedToolDispatch(call)
+	a.emitResolvedToolDispatch(ctx, call)
 }
 
 // batchCallMutationFailureCause returns a sanitized effect description when a

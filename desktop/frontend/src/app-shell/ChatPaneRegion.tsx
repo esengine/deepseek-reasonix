@@ -138,6 +138,7 @@ export function ChatPaneRegion(props: ChatPaneRegionProps) {
                 revealSignal={transcript.revealSignal}
                 hydrating={transcript.transcriptHydrating || (transitioning && !transcript.navigationDataReady)}
                 hasOlderHistory={!transitioning && state.historyHasOlder && !rewind.stateActive}
+                stableHistoryPaging={state.transcriptProtocol === 1}
                 historyStartTurn={state.historyStartTurn}
                 historyTotalTurns={state.historyTotalTurns}
                 loadingOlderHistory={state.historyOlderLoading}

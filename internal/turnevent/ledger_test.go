@@ -126,8 +126,11 @@ func TestLedgerSubmissionReceiptSurvivesCompletionAndIsOneShot(t *testing.T) {
 		t.Fatalf("EventsAfter: %v", err)
 	}
 	last := records[len(records)-1]
-	if last.SubmissionID != "" || last.RuntimeEpoch != "" {
-		t.Fatalf("automatic follow-up inherited routing metadata: %+v", last)
+	if last.SubmissionID != "" || last.Event.SubmissionID != "" {
+		t.Fatalf("automatic follow-up inherited the previous submission: %+v", last)
+	}
+	if last.RuntimeEpoch != "epoch-1" || last.Event.RuntimeEpoch != "epoch-1" {
+		t.Fatalf("automatic follow-up lost its owning runtime epoch: %+v", last)
 	}
 	if got := l.TurnIDForSubmission("submission-1"); got != first {
 		t.Fatalf("receipt after replacement = %q, want original %q", got, first)

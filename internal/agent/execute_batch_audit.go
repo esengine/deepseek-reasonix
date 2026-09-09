@@ -10,7 +10,7 @@ import (
 	"reasonix/internal/provider"
 )
 
-func (a *Agent) emitBatchToolResult(c provider.ToolCall, o toolOutcome, duration, started int64, parallel bool, batchStart time.Time) error {
+func (a *Agent) emitBatchToolResult(ctx context.Context, c provider.ToolCall, o toolOutcome, duration, started int64, parallel bool, batchStart time.Time) error {
 	t, _, ambiguous := a.svc.tools.ResolveCall(c.Name)
 	ok := t != nil && len(ambiguous) == 0
 	readOnly := ok && t.ReadOnly()
@@ -52,7 +52,7 @@ func (a *Agent) emitBatchToolResult(c provider.ToolCall, o toolOutcome, duration
 			tr.WorkspaceAllPaths = mutation.AllPaths
 		}
 	}
-	if err := event.EmitChecked(a.svc.sink, event.Event{Kind: event.ToolResult, Tool: tr}); err != nil {
+	if err := event.EmitChecked(a.svc.sink, event.Event{Kind: event.ToolResult, MessageID: messageIdentity(ctx), Tool: tr}); err != nil {
 		return err
 	}
 	if o.truncated && o.truncMsg != "" {

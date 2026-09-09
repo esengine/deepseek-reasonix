@@ -11,6 +11,12 @@ import (
 type Event struct {
 	RuntimeState     *event.RuntimeStateSnapshot      `json:"runtimeState,omitempty"`
 	Kind             string                           `json:"kind"`
+	MessageID        string                           `json:"messageId,omitempty"`
+	AttemptID        string                           `json:"attemptId,omitempty"`
+	Source           string                           `json:"source,omitempty"`
+	SessionID        string                           `json:"sessionId,omitempty"`
+	RuntimeEpoch     string                           `json:"runtimeEpoch,omitempty"`
+	SubmissionID     string                           `json:"submissionId,omitempty"`
 	PromptID         string                           `json:"promptId,omitempty"`
 	PromptKind       string                           `json:"promptKind,omitempty"`
 	PromptLegacy     bool                             `json:"promptLegacy,omitempty"`
