@@ -329,15 +329,15 @@ func (a *Agent) applyDeliveryPolicyGates(turn *turnRuntime, plan *toolCallPlan) 
 				execution: shellPreflightExecution(plan, true),
 			}, true
 		}
-		mixed := evidence.BashToolCallMixesMutationAndMaskableVerification
-		if closedLoop {
-			mixed = evidence.BashToolCallMixesMutationAndVerification
-		}
-		if mixed(plan.evidenceArgs) {
-			msg := evidence.ShellContractPreflightMessage("mixed")
-			if closedLoop {
-				msg = "blocked: this command mixes a verification check with a segment that may write state. Run the state-changing preparation separately while a todo is in_progress, then run a read-only verification command. For generated input, prefer a host-recognized read-only pipeline into the verifier (for example: tail ... | head ... | node --check -) instead of writing a temporary file."
-			}
+		// Standard (non-closed-loop) turns never block a bash command for mixing
+		// a mutation with a verification segment. This mirrors Codex: bash
+		// already exposes each segment's status (&&/;/| semantics are transparent
+		// to the model), and a combined step avoids the extra agent round trips a
+		// split would cost with no real safety gain. Only closed-loop turns keep
+		// the strict barrier, because there a mutation invalidates the
+		// verification receipt even when the exit status is honest.
+		if closedLoop && evidence.BashToolCallMixesMutationAndVerification(plan.evidenceArgs) {
+			msg := "blocked: this command mixes a verification check with a segment that may write state. Run the state-changing preparation separately while a todo is in_progress, then run a read-only verification command. For generated input, prefer a host-recognized read-only pipeline into the verifier (for example: tail ... | head ... | node --check -) instead of writing a temporary file."
 			return toolOutcome{
 				output:    msg,
 				blocked:   true,

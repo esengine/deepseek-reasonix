@@ -15,10 +15,12 @@ import (
 	"reasonix/internal/tool/builtin"
 )
 
-func TestOrdinaryModeBlocksMixedMutationAndVerification(t *testing.T) {
-	// Preflight runs before Execute, so a fake bash is enough — the process
-	// must never start for a mixed mutation+verification command. `;` is the
-	// shape that matters: the verifier's exit status replaces go generate's.
+func TestOrdinaryModeRunsMixedMutationAndVerification(t *testing.T) {
+	// Standard (non-delivery) turns do NOT block mixed mutation+verification
+	// commands, mirroring Codex. `;` is the shape that had been blocked before:
+	// the verifier's exit status replaces go generate's. Even so, bash exposes
+	// the real outcome to the model, and forcing a split would add round trips
+	// with no safety gain. Only closed-loop turns keep the strict barrier.
 	reg := tool.NewRegistry()
 	reg.Add(fakeTool{name: "bash", readOnly: false})
 	prov := &scriptedProvider{name: "p", turns: [][]provider.Chunk{
@@ -30,25 +32,35 @@ func TestOrdinaryModeBlocksMixedMutationAndVerification(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := toolResultByID(a.sess.conversation, "m1")
+	if !strings.Contains(got, "bash done") {
+		t.Fatalf("mixed command was not executed in ordinary mode: result = %q", got)
+	}
+	if strings.Contains(got, "blocked:") {
+		t.Fatalf("ordinary mode blocked a mixed command: %q", got)
+	}
+}
+
+func TestClosedLoopBlocksMixedMutationAndVerification(t *testing.T) {
+	// A closed-loop (delivery-floor) turn must still block the mixed shape:
+	// there a mutation invalidates the verification receipt even when the exit
+	// status is honest, so the command may not run as verification evidence.
+	reg := tool.NewRegistry()
+	reg.Add(fakeTool{name: "bash", readOnly: false})
+	prov := &scriptedProvider{name: "p", turns: [][]provider.Chunk{
+		{toolCallChunk("m1", "bash", `{"command":"go generate ./... ; go test ./..."}`), {Type: provider.ChunkDone}},
+		{{Type: provider.ChunkText, Text: "ok"}, {Type: provider.ChunkDone}},
+	}}
+	a := New(prov, reg, NewSession(""), Options{}, event.Discard)
+	if err := a.Run(withClosedLoopContext(context.Background()), "test"); err != nil {
+		t.Fatal(err)
+	}
+	got := toolResultByID(a.sess.conversation, "m1")
 	if strings.Contains(got, "bash done") {
-		t.Fatal("mixed command was executed")
+		t.Fatal("closed-loop ran a mixed command")
 	}
-	if !strings.Contains(got, "state-changing segment") {
-		t.Fatalf("result = %q, want ordinary-mode mixed block", got)
+	if !strings.Contains(got, "blocked:") {
+		t.Fatalf("result = %q, want closed-loop mixed block", got)
 	}
-	for _, msg := range a.sess.conversation.Snapshot() {
-		if msg.ToolCallID != "m1" {
-			continue
-		}
-		if msg.ToolExecution == nil || msg.ToolExecution.State != tool.ShellStateNotRun {
-			t.Fatalf("execution = %+v, want not_run", msg.ToolExecution)
-		}
-		if msg.ToolExecution.FailurePhase != tool.ShellPhasePreflight {
-			t.Fatalf("phase = %q", msg.ToolExecution.FailurePhase)
-		}
-		return
-	}
-	t.Fatal("tool result missing")
 }
 
 // TestOrdinaryModeRunsShortCircuitBuildAndVerify guards the everyday shape the
