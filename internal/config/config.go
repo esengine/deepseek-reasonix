@@ -1803,6 +1803,21 @@ const LanguagePolicy = `Reply in the same language the user is using in their mo
 	`whenever they switch. Let this also guide the language you think in. Always keep code, ` +
 	`identifiers, file paths, shell commands, and technical terms in their original form — never translate them.`
 
+// ContextManagementPolicy documents the automatic context-maintenance contract
+// (#9520, Part 1). Static English text appended to every system prompt so it
+// stays in the cache-stable prefix; the per-turn numbers live in the
+// <context-budget> transient block instead. Knowing the mechanism exists is
+// what lets the model plan large tasks in waves instead of rushing or
+// abandoning them as the window fills.
+const ContextManagementPolicy = `This host maintains context automatically. When the conversation approaches ` +
+	`its compaction threshold, older turns are summarized into a compact projection ` +
+	`while the recent tail is kept verbatim; work is not lost and the task does not ` +
+	`need to be rushed or abandoned. Plan large tasks in waves and delegate long ` +
+	`operations to background tasks. When the per-turn context budget warns that ` +
+	`compaction is approaching, write key decisions and progress into a project ` +
+	`document first — a short note survives the summary far cheaper than re-reading ` +
+	`the transcript.`
+
 // Default returns the built-in default configuration.
 func Default() *Config {
 	return &Config{

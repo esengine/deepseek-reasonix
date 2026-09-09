@@ -545,7 +545,9 @@ func (a *Agent) withTurnPreferences(input string) string {
 		}
 	}
 	input = WithReasoningLanguage(input, lang)
-	return input
+	// #9520: the budget line rides every turn so the model can plan against
+	// the real limit instead of guessing; kept last so it lands outermost.
+	return a.WithContextBudget(input)
 }
 
 // SetAsker installs the asker the `ask` tool uses to question the user.

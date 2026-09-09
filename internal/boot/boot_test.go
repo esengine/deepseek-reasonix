@@ -2912,6 +2912,34 @@ func systemMessage(msgs []provider.Message) string {
 	return ""
 }
 
+func stripLanguagePolicy(s string) string {
+	s = strings.TrimSpace(s)
+	for _, policy := range []string{
+		// Reverse append order (see appendCorePolicies): the #9520 static
+		// context-management contract is appended last, so it peels first.
+		config.ContextManagementPolicy,
+		config.LanguagePolicy, config.WorkPracticePolicy,
+		config.UserDecisionPolicy,
+	} {
+		s = strings.TrimSpace(strings.TrimSuffix(s, policy))
+	}
+	return s
+}
+
+func stripEnvironmentBlock(s string) string {
+	if before, _, ok := strings.Cut(s, "\n\n## Environment"); ok {
+		return before
+	}
+	return s
+}
+
+func stripCurrentWorkspaceLine(s string) string {
+	if i := strings.LastIndex(s, "\n\nCurrent workspace: "); i >= 0 {
+		return s[:i]
+	}
+	return s
+}
+
 func writeFile(t *testing.T, dir, name, body string) {
 	t.Helper()
 	if err := writeFileRaw(dir, name, body); err != nil {
