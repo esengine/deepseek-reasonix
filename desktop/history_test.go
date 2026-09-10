@@ -1244,6 +1244,104 @@ func TestResumeSessionForTabDetachesRunningRuntimeForDifferentSessionPath(t *tes
 	waitNotRunning(t, ctrlA)
 }
 
+func TestResumeSessionForTabReusesOpenSessionPathRuntime(t *testing.T) {
+	isolateDesktopUserDirs(t)
+	dir := desktopSessionDir(globalTabWorkspaceRoot())
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir session dir: %v", err)
+	}
+
+	openPath := filepath.Join(dir, "open-session.jsonl")
+	blankPath := filepath.Join(dir, "blank-session.jsonl")
+	writeHistoryTestSession(t, openPath, "open prompt")
+	writeHistoryTestSession(t, blankPath, "blank prompt")
+
+	openSink := &tabEventSink{tabID: "open"}
+	openSession, err := agent.LoadSession(openPath)
+	if err != nil {
+		t.Fatalf("LoadSession(open): %v", err)
+	}
+	openExec := agent.New(nil, nil, openSession, agent.Options{}, openSink)
+	openCtrl := control.New(control.Options{
+		Executor:    openExec,
+		SessionDir:  dir,
+		SessionPath: openPath,
+		Label:       "open",
+		Sink:        openSink,
+	})
+	blankCtrl := control.New(control.Options{SessionDir: dir, SessionPath: blankPath, Label: "blank", Sink: event.Discard})
+	defer openCtrl.Close()
+	defer blankCtrl.Close()
+
+	app := NewApp()
+	openTab := &WorkspaceTab{
+		ID:            "open",
+		Scope:         "global",
+		WorkspaceRoot: globalTabWorkspaceRoot(),
+		SessionPath:   openPath,
+		Ctrl:          openCtrl,
+		Label:         "open",
+		Ready:         true,
+		sink:          openSink,
+		disabledMCP:   map[string]ServerView{},
+	}
+	if err := openTab.ensureSessionLease(openPath); err != nil {
+		t.Fatalf("open ensureSessionLease: %v", err)
+	}
+	defer openTab.releaseSessionLease()
+
+	blankTab := &WorkspaceTab{
+		ID:            "blank",
+		Scope:         "global",
+		WorkspaceRoot: globalTabWorkspaceRoot(),
+		SessionPath:   blankPath,
+		Ctrl:          blankCtrl,
+		Label:         "blank",
+		Ready:         true,
+		sink:          &tabEventSink{tabID: "blank", app: app},
+		disabledMCP:   map[string]ServerView{},
+	}
+	if err := blankTab.ensureSessionLease(blankPath); err != nil {
+		t.Fatalf("blank ensureSessionLease: %v", err)
+	}
+	defer blankTab.releaseSessionLease()
+
+	app.tabs[openTab.ID] = openTab
+	app.tabs[blankTab.ID] = blankTab
+	app.tabOrder = []string{openTab.ID, blankTab.ID}
+	app.activeTabID = blankTab.ID
+
+	got, err := app.ResumeSessionForTab(blankTab.ID, openPath)
+	if err != nil {
+		t.Fatalf("ResumeSessionForTab: %v", err)
+	}
+	if len(got) != 1 || got[0].Content != "open prompt" {
+		t.Fatalf("resumed history = %+v, want open prompt", got)
+	}
+	if blankTab.Ctrl != openCtrl {
+		t.Fatalf("resumed controller = %p, want open controller %p", blankTab.Ctrl, openCtrl)
+	}
+	if blankTab.sink != openSink {
+		t.Fatalf("resumed sink = %p, want open sink %p", blankTab.sink, openSink)
+	}
+	if openSink.tabID != blankTab.ID {
+		t.Fatalf("sink tab id = %q, want %q", openSink.tabID, blankTab.ID)
+	}
+	if _, ok := app.tabs[openTab.ID]; ok {
+		t.Fatal("source tab for reused runtime should be removed")
+	}
+	if gotKey := blankTab.sessionLeaseRuntimeKey(); gotKey != sessionRuntimeKey(openPath) {
+		t.Fatalf("resumed tab lease key = %q, want %q", gotKey, sessionRuntimeKey(openPath))
+	}
+	if gotKey := openTab.sessionLeaseRuntimeKey(); gotKey != "" {
+		t.Fatalf("source tab kept session lease %q", gotKey)
+	}
+	if lease, err := agent.TryAcquireSessionLease(openPath); err == nil {
+		lease.Release()
+		t.Fatal("resumed session path allowed a second writer lease")
+	}
+}
+
 func TestRebindTabToLoadedSessionReusesPreloadedTranscript(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	root := globalTabWorkspaceRoot()
