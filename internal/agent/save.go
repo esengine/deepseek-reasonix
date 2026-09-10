@@ -302,7 +302,16 @@ func (s *Session) saveLocked(path string, mode sessionSaveMode) error {
 		// runs under the save locks, not before them, so a saver that waited
 		// on a concurrent writer still re-evaluates against the state it must
 		// persist when it finally enters the critical section.
-		return nil
+		//
+		// An up-to-date transcript does not imply up-to-date derived files: a
+		// tool checkpoint commits the transcript but defers the listing and
+		// display indexes. Republish them here instead of paying for the full
+		// save above just to rebuild a derived index. A log whose derived files
+		// need more than that (schema 2 also derives its head index and meta
+		// mirror) declines and falls through unchanged.
+		if s.flushDeferredDerivedFiles(path) {
+			return nil
+		}
 	}
 	// Capture the snapshot only while holding the save locks. Concurrent
 	// in-process savers (turn-end snapshot, periodic autosave, shutdown
@@ -310,16 +319,20 @@ func (s *Session) saveLocked(path string, mode sessionSaveMode) error {
 	// stalest capture written last would then read the newer transcript it
 	// lost the race to as a bogus stale-prefix conflict.
 	msgs, version, rewriteVersion := s.snapshotWithVersion()
-	digest, contentBytes, err := digestAndSizeSessionMessages(msgs)
-	if err != nil {
-		return err
-	}
 	probe, err := probeLogForSave(path)
 	if err != nil {
 		return err
 	}
 	if route := s.dagSaveRoute(path, probe); route != dagRouteSchemaOne {
+		digest, err := s.snapshotDigest(path, msgs, version)
+		if err != nil {
+			return err
+		}
 		return s.saveDAGLocked(path, mode, route, msgs, version, rewriteVersion, digest)
+	}
+	digest, contentBytes, err := digestAndSizeSessionMessages(msgs)
+	if err != nil {
+		return err
 	}
 	repairLog := false
 	deferProjection := mode.defersProjection()
@@ -823,13 +836,22 @@ func (s *Session) ownsPersistedState(path string, existingDigest [sha256.Size]by
 // damage is waiting to be persisted. Every one of these flags fails open —
 // when any is unset or stale the caller falls through to the full save path,
 // which re-derives the truth from disk.
+//
+// persisted.projectionPending is deliberately not part of this decision. It
+// reports derived files (listing sidecar, display cache) that a tool
+// checkpoint or an unlocked shutdown append left to a later save; the
+// transcript bytes themselves are already committed, and this baseline
+// describes exactly those bytes. Letting it veto the no-op would push a
+// defensive switch/close snapshot on a large session through the serialize +
+// digest + probe path this fast path exists to avoid (#6607) merely to
+// republish a derived index. The caller republishes those derived files
+// directly instead — see flushDeferredDerivedFiles.
 func (s *Session) snapshotUpToDate(path string) bool {
 	key := canonicalSessionSavePath(path)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.persisted.ok &&
 		s.persisted.saveVerified &&
-		!s.persisted.projectionPending &&
 		s.persisted.path == key &&
 		s.persisted.version == s.version &&
 		s.persisted.revisionKnown &&
@@ -1033,6 +1055,25 @@ func messageForSessionIdentity(m provider.Message) provider.Message {
 	m.CreatedAt = 0
 	m.ID = ""
 	return m
+}
+
+// snapshotDigest returns the transcript digest a schema-2 save needs. When the
+// persistence baseline already describes exactly this version — the same proof
+// the snapshot no-op relies on — the stored digest is that value by
+// construction, because it was written for this version and only a version or
+// rewrite bump invalidates it. A schema-2 save only records this digest and
+// publishes it into derived files; it never uses it to decide what to append
+// (planDAGWrite diffs the transcript itself). Recomputing it instead costs a
+// json.Marshal + sha256 pass over every message, which on a large session
+// dominates a defensive switch/close snapshot.
+func (s *Session) snapshotDigest(path string, msgs []provider.Message, version uint64) ([sha256.Size]byte, error) {
+	if s.snapshotUpToDate(path) {
+		if state := s.persistState(path); state.ok && state.version == version {
+			return state.digest, nil
+		}
+	}
+	digest, _, err := digestAndSizeSessionMessages(msgs)
+	return digest, err
 }
 
 // digestAndSizeSessionMessages also reports the encoded transcript size, which

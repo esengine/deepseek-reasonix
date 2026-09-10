@@ -57,6 +57,46 @@ func (s *Session) refreshPendingCheckpointProjection(path string, msgs []provide
 	}
 }
 
+// flushDeferredDerivedFiles republishes the derived files a tool checkpoint or
+// an unlocked shutdown append deliberately deferred, using the digest and
+// revision that save already committed. It runs on the snapshot no-op path,
+// where the transcript is provably current against disk, so all that is left is
+// rebuilding the listing sidecar and the display cache from the in-memory view —
+// no serialize or digest pass of its own. Gating the no-op on projectionPending
+// instead would push every defensive switch/close snapshot on a large session
+// through that full path just to republish a derived index.
+//
+// It reports whether the no-op may stand. A schema-2 (DAG) log also derives its
+// head index and meta mirror from the DAG save context, so that case declines
+// and lets the full path publish what it owns. A failed derived write declines
+// too: projectionPending stays set so a later save retries, matching the full
+// save path, because a derived file must never invalidate the transcript
+// receipt.
+func (s *Session) flushDeferredDerivedFiles(path string) bool {
+	state := s.persistState(path)
+	if !state.ok || !state.projectionPending {
+		return true
+	}
+	probe, err := probeLogForSave(path)
+	if err != nil || s.dagSaveRoute(path, probe) != dagRouteSchemaOne {
+		return false
+	}
+	msgs, version, rewriteVersion := s.snapshotWithVersion()
+	if version != state.version {
+		// The transcript moved between the no-op decision and here: the
+		// ordinary save path owns this generation and will republish.
+		return false
+	}
+	if err := refreshSessionDisplayIndex(path, msgs, state.digest, state.revision, -1); err != nil {
+		slog.Warn("session: keeping save after display index write failure", "path", path, "err", err)
+		return false
+	}
+	// Publishes the listing sidecar and clears projectionPending against the
+	// digest this baseline already describes.
+	s.markPersistedWithListing(path, state.digest, version, state.revision, rewriteVersion, msgs)
+	return true
+}
+
 func (mode sessionSaveMode) eventReason() string {
 	switch mode {
 	case sessionSaveSnapshot, sessionSaveToolCheckpoint:

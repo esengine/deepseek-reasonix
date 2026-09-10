@@ -54,8 +54,15 @@ func TestToolCheckpointDefersOnlyDerivedProjection(t *testing.T) {
 	if !bytes.Equal(before, after) || len(observer.events) != 0 {
 		t.Fatal("tool checkpoint refreshed the display projection")
 	}
-	if s.snapshotUpToDate(path) {
-		t.Fatal("deferred projection bypasses normal save")
+	// The deferred projection must not veto the snapshot no-op: the transcript
+	// itself is committed, and only its derived files are behind. Gating the
+	// no-op on it would send every defensive switch/close snapshot on a large
+	// session through the serialize + digest + probe path it exists to avoid.
+	if !s.snapshotUpToDate(path) {
+		t.Fatal("deferred projection vetoed the transcript no-op")
+	}
+	if !s.DerivedFilesPending(path) {
+		t.Fatal("deferred projection is not reported as pending")
 	}
 	if err := s.SaveSnapshot(path); err != nil {
 		t.Fatal(err)
@@ -66,6 +73,9 @@ func TestToolCheckpointDefersOnlyDerivedProjection(t *testing.T) {
 	}
 	if bytes.Equal(before, after) || len(observer.events) != 1 || !s.snapshotUpToDate(path) {
 		t.Fatal("normal save did not publish deferred projection")
+	}
+	if s.DerivedFilesPending(path) {
+		t.Fatal("deferred projection stayed pending after the no-op republished it")
 	}
 	if observer.events[0].Rewrite {
 		t.Fatal("append checkpoint falsely invalidated history as a rewrite")
