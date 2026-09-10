@@ -5,7 +5,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
+	"reasonix/internal/capability"
 	"reasonix/internal/completion"
 	"reasonix/internal/event"
 	"reasonix/internal/evidence"
@@ -116,5 +118,70 @@ func TestExecutionPolicyAbsentOnNewTurn(t *testing.T) {
 		if m.Role == provider.RoleUser && strings.Contains(m.Content, "<execution-policy") {
 			t.Fatal("new turns must not inject execution-policy")
 		}
+	}
+}
+
+// The phase pair around a tool batch is what gives ProviderWaitMs and
+// ToolExecMs their meaning, so the order is asserted, not just the first phase.
+func TestToolRoundAlternatesProviderAndToolPhases(t *testing.T) {
+	sink := &phaseSink{}
+	reg := tool.NewRegistry()
+	reg.Add(fakeTool{name: "read_file", readOnly: true})
+	prov := &scriptedProvider{name: "p", turns: [][]provider.Chunk{
+		{toolCallChunk("r1", "read_file", `{"path":"a.go"}`), {Type: provider.ChunkDone}},
+		{{Type: provider.ChunkText, Text: "done"}, {Type: provider.ChunkDone}},
+	}}
+	a := New(prov, reg, NewSession("sys"), Options{}, sink)
+	if err := a.Run(context.Background(), "read a.go"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		string(event.TurnPhaseWorking),
+		string(event.TurnPhaseChecking),
+		string(event.TurnPhaseWorking),
+		string(event.TurnPhaseVerifying),
+		string(event.TurnPhaseWorking),
+	}
+	if !slices.Equal(sink.phases, want) {
+		t.Fatalf("phases = %v, want %v", sink.phases, want)
+	}
+	assertToolPhasesClosed(t, sink.phases)
+}
+
+// assertToolPhasesClosed guards the accounting invariant: a tool-billed phase
+// left open swallows whatever runs next, and what runs next is usually a
+// provider round, so its wait would be billed as tool time.
+func assertToolPhasesClosed(t *testing.T, phases []string) {
+	t.Helper()
+	for i, phase := range phases {
+		switch phase {
+		case string(event.TurnPhaseChecking), string(event.TurnPhaseVerifying):
+			if i == len(phases)-1 {
+				t.Fatalf("phase %q at %d is never closed: %v", phase, i, phases)
+			}
+		}
+	}
+}
+
+// RecordPhaseMs drops anything under a millisecond, so the tool sleeps: the
+// assertion is that the bucket is reachable at all, which it was not before.
+func TestToolRoundBillsPhaseDurations(t *testing.T) {
+	audit := &capability.Audit{}
+	reg := tool.NewRegistry()
+	reg.Add(fakeTool{name: "read_file", readOnly: true, delay: 5 * time.Millisecond})
+	prov := &scriptedProvider{name: "p", turns: [][]provider.Chunk{
+		{toolCallChunk("r1", "read_file", `{"path":"a.go"}`), {Type: provider.ChunkDone}},
+		{{Type: provider.ChunkText, Text: "done"}, {Type: provider.ChunkDone}},
+	}}
+	a := New(prov, reg, NewSession("sys"), Options{CapabilityAudit: audit}, event.Discard)
+	if err := a.Run(context.Background(), "read a.go"); err != nil {
+		t.Fatal(err)
+	}
+	phases := audit.Snapshot().Phases
+	if phases.ToolExecMs <= 0 {
+		t.Fatalf("ToolExecMs = %d, want the tool span billed", phases.ToolExecMs)
+	}
+	if phases.ProviderWaitMs < 0 {
+		t.Fatalf("ProviderWaitMs = %d, want non-negative", phases.ProviderWaitMs)
 	}
 }

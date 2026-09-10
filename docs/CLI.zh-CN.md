@@ -155,6 +155,24 @@ JSONL 记录，便于离线回放并归因时间去向（工具执行 vs. 两次
 reasonix run --metrics run.json --trajectory run.trajectory.jsonl "修复失败的测试"
 ```
 
+### 回合阶段
+
+回合运行期间，宿主会发布一个不含内容的阶段标记，供前端显示当前回合正在做
+什么。CLI 显示在加载行上，桌面端显示在输入框区域。
+
+| 阶段 | 触发时机 | `capability_phases` 桶 |
+| --- | --- | --- |
+| `working` | 回合开始时，以及每批工具执行返回之后 | `ProviderWaitMs` |
+| `checking` | 即将执行一批工具时 | `ToolExecMs` |
+| `verifying` | 给出最终回答前运行最终就绪检查时 | `ToolExecMs` |
+| `reviewing` | 交付审查门检查一次改动时 | `ReviewMs` |
+
+某个阶段在下一个阶段开始时才计入对应的桶，因此 `--metrics` 中的耗时可以区分
+模型等待与工具执行，而无需重放整次运行。不足 1 毫秒的区间会被丢弃；以错误或
+暂停（而非给出回答）结束的回合不会计入最后一个区间，因此这些桶应视为下界，
+而不是对整个回合的完整划分。`SubagentWaitMs`、`UserWaitMs` 与 `CompactMs`
+目前没有发射点，保持为 0。
+
 ### 输出格式
 
 | 格式 | 行为 |
