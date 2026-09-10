@@ -147,6 +147,52 @@ func TestE2ETodoWriteProgressThenOptionalCompleteStep(t *testing.T) {
 	}
 }
 
+func TestE2EEarlyTodoCompletionsUseCanonicalEventsAndKeepRawHistory(t *testing.T) {
+	earlyArgs := `{"todos":[{"content":"A","status":"in_progress","step_id":"a"},{"content":"B","status":"completed","step_id":"b"},{"content":"C","status":"completed","step_id":"c"}]}`
+	canonicalArgs := `{"todos":[{"content":"A","status":"in_progress","step_id":"a"},{"content":"B","status":"pending","step_id":"b"},{"content":"C","status":"pending","step_id":"c"}]}`
+	mp := testutil.NewMock("m",
+		testutil.Turn{ToolCalls: []provider.ToolCall{{ID: "t0", Name: "todo_write",
+			Arguments: `{"todos":[{"content":"A","status":"in_progress","step_id":"a"},{"content":"B","status":"pending","step_id":"b"},{"content":"C","status":"pending","step_id":"c"}]}`}}},
+		testutil.Turn{ToolCalls: []provider.ToolCall{{ID: "early", Name: "todo_write", Arguments: earlyArgs}}},
+		testutil.Turn{ToolCalls: []provider.ToolCall{{ID: "signoff", Name: "complete_step",
+			Arguments: `{"step":"A","result":"done","evidence":[{"kind":"manual","summary":"checked"}]}`}}},
+		testutil.Turn{Text: "done"},
+	)
+	sink := &recordSink{}
+	a := New(mp, evidenceRegistry(), NewSession("sys"), Options{}, sink)
+	if err := a.Run(withNoClosedLoop(context.Background()), "complete the list"); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	for _, e := range append(sink.kinds(event.ToolResultPreview), sink.kinds(event.ToolResult)...) {
+		if e.Tool.ID != "early" {
+			continue
+		}
+		if e.Tool.Args != canonicalArgs {
+			t.Fatalf("early %v args = %q, want canonical %q", e.Kind, e.Tool.Args, canonicalArgs)
+		}
+	}
+	var rawHistory string
+	for _, message := range a.Session().Messages {
+		for _, call := range message.ToolCalls {
+			if call.ID == "early" {
+				rawHistory = call.Arguments
+			}
+		}
+	}
+	if rawHistory != earlyArgs {
+		t.Fatalf("historical early ToolCall args = %q, want raw %q", rawHistory, earlyArgs)
+	}
+	for i, todo := range a.CanonicalTodoState() {
+		if todo.Status != "completed" {
+			t.Fatalf("canonical todo %d = %+v, want completed after A boundary", i+1, todo)
+		}
+	}
+	if len(a.sess.deferredTodoCompletions) != 0 {
+		t.Fatalf("deferred completions remained after the boundary: %v", a.sess.deferredTodoCompletions)
+	}
+}
+
 // A command cited with a different string than it ran under (#2917: the model
 // drops the cd-prefix) is still accepted via segment matching, in-turn.
 func TestE2ECommandDriftAcceptedInTurn(t *testing.T) {

@@ -6,8 +6,23 @@ package evidence
 
 import (
 	"context"
+	"strconv"
 	"strings"
 )
+
+// todoUpdateIdentityKey is deliberately a small, in-memory identity used only
+// while repairing one todo update. It is not a transcript or provider field:
+// step_id wins, and id-less items use level plus normalized content.
+func todoUpdateIdentityKey(todo TodoItem) (string, bool) {
+	if id := strings.TrimSpace(todo.StepID); id != "" {
+		return "id:" + id, true
+	}
+	content := normalizeStepText(todo.Content)
+	if content == "" {
+		return "", false
+	}
+	return "text:" + strconv.Itoa(todo.Level) + ":" + content, true
+}
 
 // todoMatchAt is the one place a positive match is built, so every path reports
 // the matched item's stable id alongside its position.

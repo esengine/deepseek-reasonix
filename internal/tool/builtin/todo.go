@@ -88,8 +88,16 @@ func (todoWrite) Execute(ctx context.Context, args json.RawMessage) (string, err
 			return "", fmt.Errorf("todo %d: invalid status %q (want pending|in_progress|completed)", i+1, t.Status)
 		}
 	}
+	repaired := false
+	var deferred []evidence.TodoItem
 	if err := evidence.ValidateSerialTodos(toEvidenceTodos(p.Todos)); err != nil {
-		return "", err
+		canonical, pendingCompletions, ok := evidence.RepairSerialTodoUpdateWithDeferred(todoBaseline(ctx), toEvidenceTodos(p.Todos))
+		if !ok {
+			return "", err
+		}
+		p.Todos = fromEvidenceTodos(canonical)
+		deferred = pendingCompletions
+		repaired = true
 	}
 	if err := verifyUniqueStepIDs(p.Todos); err != nil {
 		return "", err
@@ -105,8 +113,16 @@ func (todoWrite) Execute(ctx context.Context, args json.RawMessage) (string, err
 	if err := verifyCompletedTodoPositions(ctx, p.Todos); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("Todos updated: %d total — %d completed, %d in progress, %d pending.",
-		len(p.Todos), done, active, pending), nil
+	done, active, pending = countTodoStatuses(p.Todos)
+	message := fmt.Sprintf("Todos updated: %d total — %d completed, %d in progress, %d pending.",
+		len(p.Todos), done, active, pending)
+	if repaired {
+		message += " The list was normalized to serial order; later completed items remain pending until earlier work is complete."
+		if len(deferred) > 0 {
+			message += " The later completion was recorded and deferred; do not submit it again. It will be applied automatically after the preceding tasks complete."
+		}
+	}
+	return message, nil
 }
 
 // verifyUniqueStepIDs keeps a step id an identity: two items claiming the same
@@ -222,4 +238,32 @@ func toEvidenceTodo(todo todoItem) evidence.TodoItem {
 		Level:      todo.Level,
 		StepID:     strings.TrimSpace(todo.StepID),
 	}
+}
+
+func fromEvidenceTodos(todos []evidence.TodoItem) []todoItem {
+	out := make([]todoItem, 0, len(todos))
+	for _, todo := range todos {
+		out = append(out, todoItem{
+			Content:    todo.Content,
+			Status:     todo.Status,
+			ActiveForm: todo.ActiveForm,
+			Level:      todo.Level,
+			StepID:     todo.StepID,
+		})
+	}
+	return out
+}
+
+func countTodoStatuses(todos []todoItem) (done, active, pending int) {
+	for _, todo := range todos {
+		switch todo.Status {
+		case "completed":
+			done++
+		case "in_progress":
+			active++
+		default:
+			pending++
+		}
+	}
+	return done, active, pending
 }

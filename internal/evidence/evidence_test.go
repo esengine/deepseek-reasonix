@@ -676,6 +676,111 @@ func TestNormalizeSerialTodosRepairsLegacyOutOfOrderState(t *testing.T) {
 	}
 }
 
+func TestRepairSerialTodoUpdateWithDeferredKeepsStrictValidatorNarrow(t *testing.T) {
+	previous := []TodoItem{
+		{Content: "A", Status: "in_progress", StepID: "a"},
+		{Content: "B", Status: "pending", StepID: "b"},
+		{Content: "C", Status: "pending", StepID: "c"},
+	}
+	next := []TodoItem{
+		{Content: "A", Status: "in_progress", StepID: "a"},
+		{Content: "B", Status: "completed", StepID: "b"},
+		{Content: "C", Status: "completed", StepID: "c"},
+	}
+	if err := ValidateSerialTodos(next); err == nil {
+		t.Fatal("the strict validator unexpectedly accepted out-of-order completions")
+	}
+
+	canonical, deferred, repaired := RepairSerialTodoUpdateWithDeferred(previous, next)
+	if !repaired {
+		t.Fatal("the narrow pending-completion repair was not applied")
+	}
+	wantCanonical := []TodoItem{
+		{Content: "A", Status: "in_progress", StepID: "a"},
+		{Content: "B", Status: "pending", StepID: "b"},
+		{Content: "C", Status: "pending", StepID: "c"},
+	}
+	if !reflect.DeepEqual(canonical, wantCanonical) {
+		t.Fatalf("canonical = %+v, want %+v", canonical, wantCanonical)
+	}
+	if got := []string{deferred[0].StepID, deferred[1].StepID}; !reflect.DeepEqual(got, []string{"b", "c"}) {
+		t.Fatalf("deferred identities = %v, want [b c]", got)
+	}
+	if err := ValidateSerialTodos(canonical); err != nil {
+		t.Fatalf("repaired canonical list is not strict serial state: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name     string
+		previous []TodoItem
+		next     []TodoItem
+	}{
+		{
+			name:     "reorder",
+			previous: previous,
+			next: []TodoItem{
+				{Content: "A", Status: "in_progress", StepID: "a"},
+				{Content: "C", Status: "completed", StepID: "c"},
+				{Content: "B", Status: "completed", StepID: "b"},
+			},
+		},
+		{
+			name:     "remove",
+			previous: previous,
+			next: []TodoItem{
+				{Content: "A", Status: "in_progress", StepID: "a"},
+				{Content: "B", Status: "completed", StepID: "b"},
+			},
+		},
+		{
+			name:     "duplicate identity",
+			previous: previous,
+			next: []TodoItem{
+				{Content: "A", Status: "in_progress", StepID: "a"},
+				{Content: "B", Status: "completed", StepID: "b"},
+				{Content: "B again", Status: "completed", StepID: "b"},
+			},
+		},
+		{
+			name: "completed regression",
+			previous: []TodoItem{
+				{Content: "done", Status: "completed", StepID: "done"},
+				{Content: "A", Status: "in_progress", StepID: "a"},
+				{Content: "B", Status: "pending", StepID: "b"},
+			},
+			next: []TodoItem{
+				{Content: "done", Status: "pending", StepID: "done"},
+				{Content: "A", Status: "in_progress", StepID: "a"},
+				{Content: "B", Status: "completed", StepID: "b"},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, _, repaired := RepairSerialTodoUpdateWithDeferred(tc.previous, tc.next); repaired {
+				t.Fatalf("invalid %s update was repaired", tc.name)
+			}
+		})
+	}
+}
+
+func TestRepairSerialTodoUpdateUsesNormalizedTextFallback(t *testing.T) {
+	previous := []TodoItem{
+		{Content: "A", Status: "in_progress"},
+		{Content: "Run   Tests", Status: "pending"},
+	}
+	next := []TodoItem{
+		{Content: "A", Status: "in_progress"},
+		{Content: "run tests", Status: "completed"},
+	}
+	canonical, deferred, repaired := RepairSerialTodoUpdateWithDeferred(previous, next)
+	if !repaired || len(deferred) != 1 || deferred[0].Content != "run tests" {
+		t.Fatalf("normalized text fallback = canonical:%+v deferred:%+v repaired:%t", canonical, deferred, repaired)
+	}
+	if canonical[1].Status != "pending" {
+		t.Fatalf("fallback-matched completion was not restored to pending: %+v", canonical)
+	}
+}
+
 func TestValidateSerialTodosAcceptsPhaseChains(t *testing.T) {
 	tests := []struct {
 		name  string

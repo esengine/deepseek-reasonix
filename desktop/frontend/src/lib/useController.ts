@@ -1702,7 +1702,8 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
           // subject (from args). Drop output entirely; full data is loaded on
           // demand via app.ToolResultForTab when the card is expanded.
           const existing = it;
-          const summary = t.err ? undefined : existing.summary || summarize(existing.name, existing.args, t.output);
+          const args = t.args ? t.args : it.args;
+          const summary = t.err ? undefined : existing.summary || summarize(existing.name, args, t.output);
           let status: ToolStatus = t.err ? "error" : "done";
           if (existing.subagentProgress) {
             // Sub-agent progress owns the card's final visual: a background
@@ -1729,6 +1730,7 @@ function applyEvent(s: State, e: WireEvent, preserveToolPayloads = false): State
           next[idx] = {
             ...existing,
             readOnly: t.readOnly,
+            args,
             resolvedName: t.resolvedName ?? existing.resolvedName,
             capabilityId: t.capabilityId ?? existing.capabilityId,
             status,

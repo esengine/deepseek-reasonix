@@ -49,8 +49,9 @@ type sessionRuntime struct {
 	// todoState is the host's canonical task list. It never rides in the prompt,
 	// so it survives compaction, and SetSession rebuilds it from the incoming
 	// snapshot rather than letting reset blank it.
-	todoMu    sync.Mutex
-	todoState []evidence.TodoItem
+	todoMu                  sync.Mutex
+	todoState               []evidence.TodoItem
+	deferredTodoCompletions map[string]deferredTodoCompletion
 
 	// lastPrefixShape records the previous provider request's cacheable prefix
 	// so usage events can explain prefix churn on the next request. Carried
@@ -82,6 +83,9 @@ func (r *sessionRuntime) reset(s *Session) {
 	r.compaction.consecutive = 0
 	r.compaction.failedTurn.Store(0)
 	r.compaction.lastTurn.Store(0)
+	r.todoMu.Lock()
+	r.deferredTodoCompletions = nil
+	r.todoMu.Unlock()
 }
 
 // clearReasoningReplayStrongProjection drops the process-local repair overlay.

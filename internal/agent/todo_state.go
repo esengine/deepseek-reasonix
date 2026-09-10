@@ -5,6 +5,7 @@ package agent
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"reasonix/internal/evidence"
@@ -18,12 +19,14 @@ func (a *Agent) SeedTodoState(todos []evidence.TodoItem) {
 		return
 	}
 	a.setTodoState(todos)
+	a.clearDeferredTodoCompletions()
 }
 
 // ReplaceTodoState mirrors a host-generated todo list into the canonical state.
 // It is used when the host, rather than the model, owns the full state transition.
 func (a *Agent) ReplaceTodoState(todos []evidence.TodoItem) {
 	a.setTodoState(todos)
+	a.clearDeferredTodoCompletions()
 	a.recordTodoState(a.CanonicalTodoState())
 }
 
@@ -87,6 +90,177 @@ func (a *Agent) hasIncompleteCanonicalCriteria() bool {
 	a.sess.todoMu.Lock()
 	defer a.sess.todoMu.Unlock()
 	return len(a.sess.todoState) > 0 && len(evidence.IncompleteTodos(a.sess.todoState)) > 0
+}
+
+type deferredTodoCompletion struct {
+	level int
+}
+
+func (a *Agent) clearDeferredTodoCompletions() {
+	if a == nil {
+		return
+	}
+	a.sess.todoMu.Lock()
+	a.sess.deferredTodoCompletions = nil
+	a.sess.todoMu.Unlock()
+}
+
+// runtimeTodoKey is intentionally not a persisted/public identity protocol:
+// step_id is preferred, and id-less items use only level plus normalized
+// content for the lifetime of this Agent.
+func runtimeTodoKey(todo evidence.TodoItem) (string, bool) {
+	if id := strings.TrimSpace(todo.StepID); id != "" {
+		return "id:" + id, true
+	}
+	content := strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(todo.Content)), ""))
+	if content == "" {
+		return "", false
+	}
+	return "text:" + strconv.Itoa(todo.Level) + ":" + content, true
+}
+
+func runtimeTodoIndex(todos []evidence.TodoItem) (map[string]int, map[string]bool) {
+	index := make(map[string]int, len(todos))
+	duplicates := make(map[string]bool)
+	for i, todo := range todos {
+		key, ok := runtimeTodoKey(todo)
+		if !ok {
+			continue
+		}
+		if _, exists := index[key]; exists {
+			duplicates[key] = true
+			delete(index, key)
+			continue
+		}
+		if duplicates[key] {
+			continue
+		}
+		index[key] = i
+	}
+	return index, duplicates
+}
+
+func (a *Agent) pruneDeferredTodoCompletionsLocked() {
+	if len(a.sess.deferredTodoCompletions) == 0 {
+		return
+	}
+	index, duplicates := runtimeTodoIndex(a.sess.todoState)
+	for key, deferred := range a.sess.deferredTodoCompletions {
+		i, ok := index[key]
+		if !ok || duplicates[key] || canonicalTodoStatus(a.sess.todoState[i].Status) == "completed" || a.sess.todoState[i].Level != deferred.level {
+			delete(a.sess.deferredTodoCompletions, key)
+		}
+	}
+	if len(a.sess.deferredTodoCompletions) == 0 {
+		a.sess.deferredTodoCompletions = nil
+	}
+}
+
+// acceptTodoWrite updates the runtime canonical list and records only the
+// narrow repaired completions. The caller keeps the original tool arguments;
+// this return value is for receipts/events that need the canonical view.
+func (a *Agent) acceptTodoWrite(todos []evidence.TodoItem) []evidence.TodoItem {
+	if a == nil {
+		return evidence.NormalizeSerialTodos(todos)
+	}
+	previous := a.CanonicalTodoState()
+	canonical := evidence.NormalizeSerialTodos(todos)
+	var deferred []evidence.TodoItem
+	if evidence.ValidateSerialTodos(todos) != nil {
+		if repaired, pending, ok := evidence.RepairSerialTodoUpdateWithDeferred(previous, todos); ok {
+			canonical = repaired
+			deferred = pending
+		}
+	}
+
+	a.sess.todoMu.Lock()
+	a.sess.todoState = append([]evidence.TodoItem(nil), canonical...)
+	if len(canonical) == 0 {
+		a.sess.deferredTodoCompletions = nil
+	} else {
+		for _, candidate := range deferred {
+			key, ok := runtimeTodoKey(candidate)
+			if !ok {
+				continue
+			}
+			index, duplicates := runtimeTodoIndex(a.sess.todoState)
+			i, found := index[key]
+			if !found || duplicates[key] || canonicalTodoStatus(a.sess.todoState[i].Status) != "pending" {
+				continue
+			}
+			if a.sess.deferredTodoCompletions == nil {
+				a.sess.deferredTodoCompletions = make(map[string]deferredTodoCompletion)
+			}
+			a.sess.deferredTodoCompletions[key] = deferredTodoCompletion{level: a.sess.todoState[i].Level}
+		}
+		a.pruneDeferredTodoCompletionsLocked()
+	}
+	result := append([]evidence.TodoItem(nil), a.sess.todoState...)
+	a.sess.todoMu.Unlock()
+	return result
+}
+
+func nextSerialTodoIndex(todos []evidence.TodoItem) int {
+	for i, todo := range todos {
+		if canonicalTodoStatus(todo.Status) != "in_progress" {
+			continue
+		}
+		if sub, ok := evidence.FirstUnfinishedSubStep(todos, i); ok && sub >= 0 {
+			return sub
+		}
+		return i
+	}
+	return -1
+}
+
+func (a *Agent) consumeDeferredTodoCompletionsLocked() []string {
+	if len(a.sess.todoState) == 0 || len(a.sess.deferredTodoCompletions) == 0 {
+		return nil
+	}
+	working := append([]evidence.TodoItem(nil), a.sess.todoState...)
+	deferred := make(map[string]deferredTodoCompletion, len(a.sess.deferredTodoCompletions))
+	for key, item := range a.sess.deferredTodoCompletions {
+		deferred[key] = item
+	}
+	consumed := make([]string, 0)
+	for range working {
+		index := nextSerialTodoIndex(working)
+		if index < 0 {
+			break
+		}
+		key, ok := runtimeTodoKey(working[index])
+		item, exists := deferred[key]
+		if !ok || !exists || item.level != working[index].Level {
+			break
+		}
+		before := append([]evidence.TodoItem(nil), working...)
+		if !evidence.AdvanceSerialTodo(working, index) || evidence.ValidateSerialTodos(working) != nil {
+			working = before
+			break
+		}
+		delete(deferred, key)
+		consumed = append(consumed, key)
+	}
+	a.sess.todoState = working
+	if len(deferred) == 0 {
+		a.sess.deferredTodoCompletions = nil
+	} else {
+		a.sess.deferredTodoCompletions = deferred
+	}
+	return consumed
+}
+
+func canonicalTodoArgs(todos []evidence.TodoItem) string {
+	if todos == nil {
+		todos = []evidence.TodoItem{}
+	}
+	args, err := json.Marshal(struct {
+		Todos []evidence.TodoItem `json:"todos"`
+	}{Todos: todos})
+	if err != nil {
+		return ""
+	}
+	return string(args)
 }
 
 // recordTodoState logs the host-advanced list as a synthetic todo_write receipt

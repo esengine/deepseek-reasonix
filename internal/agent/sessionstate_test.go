@@ -27,6 +27,7 @@ var sessionReset = map[string]bool{
 	"compactionState":                       true,
 	"cacheState":                            true,
 	"compaction":                            true,
+	"deferredTodoCompletions":               true,
 }
 
 // sessionCarryOver names the fields reset deliberately leaves alone, each with
@@ -147,6 +148,7 @@ func TestSetSessionRestartsTheConversationState(t *testing.T) {
 	a.sess.compaction.failedTurn.Store(8)
 	a.sess.compaction.lastTurn.Store(9)
 	a.sess.compactionState = CompactionState{}
+	a.sess.deferredTodoCompletions = map[string]deferredTodoCompletion{"id:b": {level: 0}}
 	a.unwrittenResolve.at = time.Unix(1, 0)
 
 	next := NewSession("")
@@ -175,6 +177,9 @@ func TestSetSessionRestartsTheConversationState(t *testing.T) {
 	}
 	if a.sess.cacheState != CacheStateUnknown {
 		t.Errorf("cacheState = %q, want %q", a.sess.cacheState, CacheStateUnknown)
+	}
+	if len(a.sess.deferredTodoCompletions) != 0 {
+		t.Errorf("deferred todo completions survived SetSession: %v", a.sess.deferredTodoCompletions)
 	}
 	if a.unwrittenResolve.at.IsZero() {
 		t.Error("unwrittenResolve was cleared; the retry it owes belongs to the provider configuration, not the conversation")

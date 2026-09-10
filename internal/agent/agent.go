@@ -1477,6 +1477,7 @@ func (a *Agent) advanceCanonicalTodo(step string) {
 		a.sess.todoMu.Unlock()
 		return
 	}
+	a.consumeDeferredTodoCompletionsLocked()
 	snapshot := append([]evidence.TodoItem(nil), a.sess.todoState...)
 	a.sess.todoMu.Unlock()
 	a.recordTodoState(snapshot)

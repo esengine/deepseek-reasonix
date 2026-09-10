@@ -265,3 +265,74 @@ func TestAdvanceCanonicalTodoWalksPhaseChain(t *testing.T) {
 		t.Fatalf("phase sign-off should promote the next phase's first sub-step: %+v", a.sess.todoState)
 	}
 }
+
+func TestAcceptTodoWriteDefersAndConsumesContiguousCompletions(t *testing.T) {
+	a := &Agent{
+		svc: agentServices{sink: event.Discard},
+		sess: sessionRuntime{todoState: []evidence.TodoItem{
+			{Content: "A", Status: "in_progress", StepID: "a"},
+			{Content: "B", Status: "pending", StepID: "b"},
+			{Content: "C", Status: "pending", StepID: "c"},
+		}},
+	}
+	early := []evidence.TodoItem{
+		{Content: "A", Status: "in_progress", StepID: "a"},
+		{Content: "B", Status: "completed", StepID: "b"},
+		{Content: "C", Status: "completed", StepID: "c"},
+	}
+
+	got := a.acceptTodoWrite(early)
+	if got[0].Status != "in_progress" || got[1].Status != "pending" || got[2].Status != "pending" {
+		t.Fatalf("early completion was not canonicalized: %+v", got)
+	}
+	if len(a.sess.deferredTodoCompletions) != 2 {
+		t.Fatalf("deferred completions = %v, want two entries", a.sess.deferredTodoCompletions)
+	}
+
+	// Replaying the same model update must not create duplicate facts.
+	a.acceptTodoWrite(early)
+	if len(a.sess.deferredTodoCompletions) != 2 {
+		t.Fatalf("replayed update changed deferred cardinality: %v", a.sess.deferredTodoCompletions)
+	}
+
+	a.advanceCanonicalTodo("A")
+	for i, todo := range a.sess.todoState {
+		if todo.Status != "completed" {
+			t.Fatalf("todo %d after boundary consumption = %+v, want completed", i+1, todo)
+		}
+	}
+	if len(a.sess.deferredTodoCompletions) != 0 {
+		t.Fatalf("deferred completions remained after contiguous consumption: %v", a.sess.deferredTodoCompletions)
+	}
+}
+
+func TestAcceptTodoWriteDoesNotSkipAnUnfinishedTodo(t *testing.T) {
+	a := &Agent{
+		svc: agentServices{sink: event.Discard},
+		sess: sessionRuntime{todoState: []evidence.TodoItem{
+			{Content: "A", Status: "in_progress", StepID: "a"},
+			{Content: "B", Status: "pending", StepID: "b"},
+			{Content: "D", Status: "pending", StepID: "d"},
+			{Content: "E", Status: "pending", StepID: "e"},
+		}},
+	}
+	a.acceptTodoWrite([]evidence.TodoItem{
+		{Content: "A", Status: "in_progress", StepID: "a"},
+		{Content: "B", Status: "completed", StepID: "b"},
+		{Content: "D", Status: "pending", StepID: "d"},
+		{Content: "E", Status: "completed", StepID: "e"},
+	})
+
+	a.advanceCanonicalTodo("A")
+	if a.sess.todoState[1].Status != "completed" || a.sess.todoState[2].Status != "in_progress" || a.sess.todoState[3].Status != "pending" {
+		t.Fatalf("consumption crossed unfinished D: %+v", a.sess.todoState)
+	}
+	if len(a.sess.deferredTodoCompletions) != 1 {
+		t.Fatalf("deferred E was lost after B: %v", a.sess.deferredTodoCompletions)
+	}
+
+	a.advanceCanonicalTodo("D")
+	if a.sess.todoState[3].Status != "completed" || len(a.sess.deferredTodoCompletions) != 0 {
+		t.Fatalf("deferred E was not consumed at its boundary: todos=%+v deferred=%v", a.sess.todoState, a.sess.deferredTodoCompletions)
+	}
+}

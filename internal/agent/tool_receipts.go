@@ -23,13 +23,16 @@ func (a *Agent) finalizeObservedToolReceipts(plan *toolCallPlan, result string, 
 // executes without publishing a second terminal result. Batch ToolResult
 // events still wait for the whole provider batch and remain the only terminal
 // events observed by append-only sinks.
-func (a *Agent) emitTodoResultPreview(call provider.ToolCall, output string) {
+func (a *Agent) emitTodoResultPreview(call provider.ToolCall, output, args string) {
 	if a == nil || a.svc.sink == nil {
 		return
 	}
+	if args == "" {
+		args = call.Arguments
+	}
 	a.svc.sink.Emit(event.Event{
 		Kind: event.ToolResultPreview,
-		Tool: event.Tool{ID: call.ID, Name: call.Name, Args: call.Arguments, ReadOnly: true, Output: output},
+		Tool: event.Tool{ID: call.ID, Name: call.Name, Args: args, ReadOnly: true, Output: output},
 	})
 }
 
@@ -81,6 +84,12 @@ func (a *Agent) recordToolReceipts(plan *toolCallPlan, result string, execution 
 		rec := evidence.ReceiptFromToolCall(call.Name, args, err == nil, plan.tool.ReadOnly())
 		rec.ToolCallID = call.ID
 		rec.Mutation = plan.effects.ContentMutation
+		canonicalArgs := ""
+		if err == nil && call.Name == "todo_write" {
+			canonical := a.acceptTodoWrite(rec.Todos)
+			rec.Todos = canonical
+			canonicalArgs = canonicalTodoArgs(canonical)
+		}
 		a.stampReceiptDeliveryScope(&rec)
 		rec.PolicyFloor = floorStamp
 		decorateExecutionReceipt(&rec, result, execution)
@@ -89,11 +98,10 @@ func (a *Agent) recordToolReceipts(plan *toolCallPlan, result string, execution 
 		a.commitToolReceipt(rec)
 		a.recordOperationOutcome(plan, rec, err)
 		if err == nil && call.Name == "todo_write" {
-			a.setTodoState(rec.Todos)
 			if len(rec.Todos) > 0 {
 				a.turn.deliveryCriteriaEstablished = true
 			}
-			a.emitTodoResultPreview(call, result)
+			a.emitTodoResultPreview(call, result, canonicalArgs)
 		}
 		return rec
 	}

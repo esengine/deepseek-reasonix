@@ -59,6 +59,33 @@ func TestTodoWriteRejectsNonSerialStates(t *testing.T) {
 	}
 }
 
+func TestTodoWriteRepairsLaterCompletionsAndDefersThem(t *testing.T) {
+	ledger := evidence.NewLedger()
+	ledger.Record(evidence.Receipt{
+		ToolName: "todo_write",
+		Success:  true,
+		Todos: []evidence.TodoItem{
+			{Content: "A", Status: "in_progress", StepID: "a"},
+			{Content: "B", Status: "pending", StepID: "b"},
+			{Content: "C", Status: "pending", StepID: "c"},
+		},
+	})
+	ctx := evidence.WithLedger(context.Background(), ledger)
+	args := json.RawMessage(`{"todos":[` +
+		`{"content":"A","status":"in_progress","step_id":"a"},` +
+		`{"content":"B","status":"completed","step_id":"b"},` +
+		`{"content":"C","status":"completed","step_id":"c"}]}`)
+
+	out, err := (todoWrite{}).Execute(ctx, args)
+	if err != nil {
+		t.Fatalf("later pending completions should be repaired: %v", err)
+	}
+	if !strings.Contains(out, "1 in progress") || !strings.Contains(out, "2 pending") ||
+		!strings.Contains(out, "recorded and deferred") {
+		t.Fatalf("todo_write repair acknowledgement = %q", out)
+	}
+}
+
 func TestTodoWriteAcceptsNewCompletedWithoutCompleteStepReceipt(t *testing.T) {
 	ledger := evidence.NewLedger()
 	ledger.Record(evidence.Receipt{

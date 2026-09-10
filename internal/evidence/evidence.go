@@ -235,6 +235,110 @@ func NormalizeSerialTodos(todos []TodoItem) []TodoItem {
 	return out
 }
 
+// RepairSerialTodoUpdateWithDeferred accepts only the narrow compatibility
+// case where a valid serial list keeps its order and identities but one or more
+// later pending items are marked completed before the current item advances.
+// The strict validator remains authoritative for every other malformed list.
+// The repaired list is canonical serial state; deferred contains the later
+// completion facts to be consumed at the serial boundary by the host runtime.
+func RepairSerialTodoUpdateWithDeferred(previous, next []TodoItem) (canonical, deferred []TodoItem, repaired bool) {
+	previous = normalizeTodos(previous)
+	next = normalizeTodos(next)
+	if len(previous) == 0 || len(next) < len(previous) || ValidateSerialTodos(previous) != nil || ValidateSerialTodos(next) == nil {
+		return nil, nil, false
+	}
+	if !uniqueTodoUpdateIdentities(previous) || !uniqueTodoUpdateIdentities(next) {
+		return nil, nil, false
+	}
+
+	active := firstSerialWorkIndex(previous)
+	if active < 0 {
+		return nil, nil, false
+	}
+	changedCompletion := false
+	for i, prior := range previous {
+		candidate := next[i]
+		priorKey, priorOK := todoUpdateIdentityKey(prior)
+		candidateKey, candidateOK := todoUpdateIdentityKey(candidate)
+		if !priorOK || !candidateOK || priorKey != candidateKey || prior.Level != candidate.Level {
+			return nil, nil, false
+		}
+		before, after := todoStatus(prior.Status), todoStatus(candidate.Status)
+		if i <= active && before != after {
+			return nil, nil, false
+		}
+		switch {
+		case before == "completed" && after != "completed":
+			return nil, nil, false
+		case before == after:
+		case before == "pending" && after == "completed":
+			changedCompletion = true
+		default:
+			return nil, nil, false
+		}
+	}
+	for _, candidate := range next[len(previous):] {
+		if todoStatus(candidate.Status) != "pending" {
+			return nil, nil, false
+		}
+	}
+	if !changedCompletion {
+		return nil, nil, false
+	}
+
+	canonical = NormalizeSerialTodos(next)
+	if ValidateSerialTodos(canonical) != nil {
+		return nil, nil, false
+	}
+	for i, prior := range previous {
+		if active < 0 || i <= active || todoStatus(prior.Status) != "pending" || todoStatus(next[i].Status) != "completed" || todoStatus(canonical[i].Status) != "pending" {
+			continue
+		}
+		deferred = append(deferred, next[i])
+	}
+	return canonical, deferred, true
+}
+
+// RepairSerialTodoUpdate is the same narrow repair without exposing the
+// deferred candidates to callers that only need the canonical list.
+func RepairSerialTodoUpdate(previous, next []TodoItem) ([]TodoItem, bool) {
+	canonical, _, repaired := RepairSerialTodoUpdateWithDeferred(previous, next)
+	return canonical, repaired
+}
+
+func uniqueTodoUpdateIdentities(todos []TodoItem) bool {
+	seen := make(map[string]struct{}, len(todos))
+	for _, todo := range todos {
+		key, ok := todoUpdateIdentityKey(todo)
+		if !ok {
+			return false
+		}
+		if _, exists := seen[key]; exists {
+			return false
+		}
+		seen[key] = struct{}{}
+	}
+	return true
+}
+
+func firstSerialWorkIndex(todos []TodoItem) int {
+	for _, seg := range serialTodoSegments(todos) {
+		if serialSegmentCompleted(todos, seg) {
+			continue
+		}
+		if seg.end == seg.head+1 {
+			return seg.head
+		}
+		for i := seg.head + 1; i < seg.end; i++ {
+			if todoStatus(todos[i].Status) != "completed" {
+				return i
+			}
+		}
+		return seg.head
+	}
+	return -1
+}
+
 func serialSegmentCompleted(todos []TodoItem, seg todoSegment) bool {
 	for i := seg.head; i < seg.end; i++ {
 		if todoStatus(todos[i].Status) != "completed" {
