@@ -708,6 +708,11 @@ name    = "stripe"
 type    = "http"
 url     = "https://mcp.stripe.com"
 headers = { Authorization = "Bearer ${STRIPE_KEY}" }
+
+[[plugins]]                       # 免费网页搜索和 URL 内容获取；无需账户或 API 密钥
+name = "parallel-search"
+type = "http"
+url  = "https://search.parallel.ai/mcp"
 ```
 
 启用的 MCP 服务器会在会话开始后于后台自动连接，因此工具上线期间聊天仍可正常使用。

@@ -899,6 +899,11 @@ name    = "stripe"
 type    = "http"
 url     = "https://mcp.stripe.com"
 headers = { Authorization = "Bearer ${STRIPE_KEY}" }
+
+[[plugins]]                       # free web search and URL fetching; no account or API key
+name = "parallel-search"
+type = "http"
+url  = "https://search.parallel.ai/mcp"
 ```
 
 Enabled MCP servers start connecting automatically in the background after a
