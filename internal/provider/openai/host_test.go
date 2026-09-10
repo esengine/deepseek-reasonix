@@ -45,6 +45,14 @@ func TestIsOfficialDeepSeekVisionModel(t *testing.T) {
 		{OfficialDeepSeekVisionModel, true},
 		{"DEEPSEEK-V4-FLASH-VISION-EXP", true},
 		{" deepseek-v4-flash-vision-exp ", true},
+		// Provider-prefixed model refs (#9671): the segment after the last "/"
+		// is the model id, so a prefixed ref of the vision SKU matches.
+		{"deepseek/deepseek-v4-flash-vision-exp", true},
+		{"DEEPSEEK/Deepseek-V4-Flash-Vision-Exp", true},
+		{" deepseek/deepseek-v4-flash-vision-exp ", true},
+		// Prefixed non-SKU names must still fail.
+		{"deepseek/deepseek-v4-flash", false},
+		{"gateway/deepseek-v4-flash-vision-exp/extra", false},
 		{"deepseek-v4-flash", false},
 		{"deepseek-v4-pro", false},
 		{"deepseek-v5-vision", false},

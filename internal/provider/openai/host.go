@@ -42,9 +42,17 @@ func IsDeepSeek(baseURL string) bool {
 const OfficialDeepSeekVisionModel = "deepseek-v4-flash-vision-exp"
 
 // IsOfficialDeepSeekVisionModel reports whether model is the pinned official
-// DeepSeek vision SKU. Matching is case-insensitive and trims surrounding space.
+// DeepSeek vision SKU. Matching is case-insensitive and trims surrounding
+// space. Model refs may carry a provider prefix ("deepseek/deepseek-v4-flash-
+// vision-exp" from a multi-provider config), so only the segment after the
+// last "/" — the actual model id — participates in the SKU check (#9671).
+// Flash, Pro, and future names that merely contain "vision" still fail.
 func IsOfficialDeepSeekVisionModel(model string) bool {
-	return strings.EqualFold(strings.TrimSpace(model), OfficialDeepSeekVisionModel)
+	model = strings.TrimSpace(model)
+	if i := strings.LastIndex(model, "/"); i >= 0 {
+		model = model[i+1:]
+	}
+	return strings.EqualFold(model, OfficialDeepSeekVisionModel)
 }
 
 // IsOfficialDeepSeekTextModel identifies known text-only models, not future SKUs.
