@@ -11,12 +11,12 @@ Every entry carries one class: `keep-business` keeps its Go implementation and c
 | event | 16 | 0 | 0 | 16 |
 | frontend-native | 0 | 0 | 0 | 0 |
 | frontend-event | 10 | 0 | 0 | 10 |
-| css-marker | 9 | 0 | 0 | 9 |
+| css-marker | 10 | 0 | 0 | 10 |
 | persistence | 11 | 0 | 0 | 11 |
 | shell-file | 1 | 39 | 4 | 44 |
 | artifact | 5 | 0 | 0 | 5 |
 | ci-job | 20 | 0 | 0 | 20 |
-| **all** | | | | **695** |
+| **all** | | | | **696** |
 
 ## Desktop commands (Go `App` methods bound to the UI)
 
@@ -658,6 +658,7 @@ Every entry carries one class: `keep-business` keeps its Go implementation and c
 | `--reasonix-draggable` |  | desktop/frontend/src/components/ScrollDiagnosticPanel.css | keep-business (保留业务实现) | rewritten to -webkit-app-region by scripts/shell-css.mjs for the Electron bundle |
 | `--reasonix-draggable` |  | desktop/frontend/src/components/SettingsPanel.css | keep-business (保留业务实现) | rewritten to -webkit-app-region by scripts/shell-css.mjs for the Electron bundle |
 | `--reasonix-draggable` |  | desktop/frontend/src/components/SettingsSelect.css | keep-business (保留业务实现) | rewritten to -webkit-app-region by scripts/shell-css.mjs for the Electron bundle |
+| `--reasonix-draggable` |  | desktop/frontend/src/components/TrajectoryPanel.css | keep-business (保留业务实现) | rewritten to -webkit-app-region by scripts/shell-css.mjs for the Electron bundle |
 | `--reasonix-draggable` |  | desktop/frontend/src/custom/features/heartbeat/heartbeat.css | keep-business (保留业务实现) | rewritten to -webkit-app-region by scripts/shell-css.mjs for the Electron bundle |
 | `--reasonix-draggable` |  | desktop/frontend/src/styles.css | keep-business (保留业务实现) | rewritten to -webkit-app-region by scripts/shell-css.mjs for the Electron bundle |
 | `data-native-drop-target` |  | desktop/frontend/src/components/Composer.tsx | keep-business (保留业务实现) | `native.onFilesDropped (HTML5 drop + getPathForFile)` |

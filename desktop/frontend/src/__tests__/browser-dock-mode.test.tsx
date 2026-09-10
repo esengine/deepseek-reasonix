@@ -48,6 +48,7 @@ const props = (mode: RightDockMode): WorkspaceDockRegionProps => ({
   t: ((key: string) => key) as Translator,
   onPickEntry: (entryId: string) => { picks.push(entryId); },
   remote: {} as WorkspaceDockRegionProps["remote"], context: {} as WorkspaceDockRegionProps["context"],
+  trajectory: {} as WorkspaceDockRegionProps["trajectory"],
   workspace: { tabId: "A" } as WorkspaceDockRegionProps["workspace"], workspaceKey: "k",
 });
 const root = createRoot(document.getElementById("root")!);
@@ -67,7 +68,7 @@ try {
   const picker = document.querySelector(".tab-picker");
   assert.ok(picker, "an empty dock renders the tab picker");
   const pickerEntries = [...picker!.querySelectorAll<HTMLButtonElement>(".tab-picker__item")];
-  assert.deepEqual(pickerEntries.map((button) => button.textContent), ["Overview", "Files", "Changes"],
+  assert.deepEqual(pickerEntries.map((button) => button.textContent), ["Overview", "Files", "Changes", "Trajectory"],
     "the picker lists every openable view, browser excluded without a shell host");
   await act(async () => pickerEntries[0].click());
   assert.deepEqual(picks, ["context"], "picking an entry opens that view through the shared command");

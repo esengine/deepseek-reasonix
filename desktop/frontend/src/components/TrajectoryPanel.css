@@ -1,0 +1,185 @@
+/* The trajectory panel. Class names are prefixed so a dock panel cannot leak
+   into the shared recipes (`.btn`, `.label`, `.count`, …) the rest of the app
+   already owns, and every colour comes from a semantic token so all themes and
+   both modes inherit it. */
+
+.trajectory {
+  --reasonix-draggable: no-drag;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: var(--font-caption);
+}
+
+.trajectory__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev);
+}
+
+.trajectory__span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--fg-faint);
+  white-space: nowrap;
+}
+
+.trajectory__empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  color: var(--fg-faint);
+  text-align: center;
+}
+
+/* The panel owns this scroller: it is not the transcript, so it does not go
+   through the transcript's single-writer gateway. No tail follow, no restore. */
+.trajectory__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.trajectory__table {
+  width: 100%;
+  /* The dock can be dragged narrow. Below this the columns would squeeze the
+     payload away, so the table keeps usable widths and the container scrolls
+     sideways instead of collapsing the column a reader actually reads. */
+  min-width: 420px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.trajectory__table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 4px 6px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  color: var(--fg-faint);
+  font-weight: 500;
+  text-align: left;
+}
+
+.trajectory__table td {
+  padding: 3px 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.trajectory__table tbody tr:hover {
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+
+.trajectory__seq,
+.trajectory__at,
+.trajectory__num {
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.trajectory__seq {
+  width: 34px;
+  color: var(--fg-faint);
+  text-align: right;
+}
+
+.trajectory__at {
+  width: 52px;
+  text-align: right;
+}
+
+.trajectory__axis {
+  width: 26%;
+  min-width: 96px;
+}
+
+.trajectory__kind {
+  width: 80px;
+  color: var(--fg-dim);
+  font-family: var(--font-mono);
+}
+
+.trajectory__payload b {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.trajectory__sub {
+  display: block;
+  margin-top: 2px;
+  color: var(--fg-dim);
+  font-style: italic;
+}
+
+/* One row is one activity: the bar starts where it started and is as long as it
+   ran. Overlapping bars are the activities that ran in parallel — a subagent's
+   bar covers the calls inside it. */
+.trajectory__track {
+  position: relative;
+  display: block;
+  height: 12px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+}
+
+.trajectory__bar,
+.trajectory__tick {
+  position: absolute;
+  top: 0;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.trajectory__tick {
+  width: 2px;
+  background: var(--fg-dim);
+}
+
+.trajectory__bar[data-c="round"] { background: var(--accent); }
+.trajectory__bar[data-c="tool"] { background: var(--fg-dim); }
+.trajectory__bar[data-c="turn"] { background: color-mix(in srgb, var(--fg) 45%, transparent); }
+.trajectory__bar[data-c="recovery"] { background: var(--warn); }
+.trajectory__bar[data-c="sys"] { background: var(--fg-faint); }
+
+/* Still running: the bar ends where the last observed event was, and the
+   hatching says the end is "so far" rather than a completion. */
+.trajectory__track[data-open="true"] .trajectory__bar {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent 0 3px,
+    color-mix(in srgb, var(--bg) 55%, transparent) 3px 6px
+  );
+}
+
+.trajectory__note {
+  flex: none;
+  padding: 6px 8px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--fg-dim);
+}
+
+.trajectory__note[data-coverage="unread"] { color: var(--fg-faint); }
+.trajectory__note[data-coverage="live_only"] { color: var(--warn); }
+.trajectory__note[data-coverage="compacted"] { color: var(--warn); }
+
+.trajectory__trimmed {
+  display: block;
+  margin-top: 2px;
+  color: var(--fg-faint);
+}

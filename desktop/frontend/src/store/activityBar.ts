@@ -11,7 +11,7 @@
 
 import { create } from "zustand";
 
-export type TabType = "file" | "changed" | "context" | "remote" | "browser";
+export type TabType = "file" | "changed" | "context" | "remote" | "browser" | "trajectory";
 
 export interface TabItem {
   id: string;

@@ -31,6 +31,7 @@ function dockModeForTab(type: TabType): RightDockMode {
     case "changed": return "changed";
     case "remote": return "remote";
     case "browser": return "browser";
+    case "trajectory": return "trajectory";
     default: return "files";
   }
 }
@@ -41,6 +42,7 @@ function tabForDockMode(mode: RightDockMode): TabType {
     case "changed": return "changed";
     case "remote": return "remote";
     case "browser": return "browser";
+    case "trajectory": return "trajectory";
     default: return "file";
   }
 }

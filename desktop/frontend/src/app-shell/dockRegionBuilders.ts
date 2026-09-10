@@ -61,6 +61,7 @@ export function buildWorkspaceDockProps(input: {
     t: input.t,
     onPickEntry: panels.openDockEntry,
     remote: { onClose: panels.closeWorkspacePanel },
+    trajectory: { tabId: input.tabId, t: input.t },
     context: {
       ...input.context, sessionTurns: input.sessionTurns,
       refreshKey: input.contextRefreshKey,

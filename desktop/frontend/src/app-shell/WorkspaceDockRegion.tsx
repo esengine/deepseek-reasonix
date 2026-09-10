@@ -12,6 +12,7 @@ import { useDockViewRequests } from "./useDockViewRequests";
 const TabContainer = lazy(() => import("../components/TabContainer/TabContainer").then((module) => ({ default: module.TabContainer })));
 
 const ContextPanel = lazy(() => import("../components/ContextPanel").then((module) => ({ default: module.ContextPanel })));
+const TrajectoryPanel = lazy(() => import("../components/TrajectoryPanel").then((module) => ({ default: module.TrajectoryPanel })));
 const RemotePanel = lazy(() => import("../components/RemotePanel").then((module) => ({ default: module.RemotePanel })));
 const BrowserSurface = lazy(() => import("../components/BrowserPanelEntry"));
 const WorkspacePanel = lazy(async () => {
@@ -33,6 +34,7 @@ export type WorkspaceDockRegionProps = {
   onPickEntry: (entryId: string) => void;
   remote: ComponentProps<typeof RemotePanel>;
   context: ComponentProps<typeof ContextPanel>;
+  trajectory: ComponentProps<typeof TrajectoryPanel>;
   workspace: ComponentProps<typeof WorkspacePanel>;
   workspaceKey: string;
   workspaceRoot?: string;
@@ -67,6 +69,8 @@ export function WorkspaceDockRegion(props: WorkspaceDockRegionProps) {
         return <RemotePanel {...props.remote} />;
       case "browser":
         return <BrowserSurface surface="panel" taskId={props.workspace.tabId} />;
+      case "trajectory":
+        return <TrajectoryPanel {...props.trajectory} />;
       default:
         return (
           <WorkspacePanel

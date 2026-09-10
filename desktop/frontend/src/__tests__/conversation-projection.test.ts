@@ -65,6 +65,7 @@ for (const chatVisible of [false, true]) for (const localToolsEnabled of [false,
       visible: layout.dockVisible, overlay: layout.dockOverlay, mode: dockMode,
       creation: false, showContext: true, t: ((key: string) => key) as Translator,
       onPickEntry: noop, remote: { onClose: noop }, context: view.context,
+      trajectory: { t: ((key: string) => key) as Translator },
       workspaceKey: "fixture", workspace: { open: layout.dockVisible, maximized: false, onClose: noop, onToggleMaximized: noop },
     }));
     assert.equal(markup, "", "actual dock region never mounts local Files/Changes for a remote source");

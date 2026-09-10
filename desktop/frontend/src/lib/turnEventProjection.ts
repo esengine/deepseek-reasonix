@@ -1,10 +1,13 @@
 import { asArray } from "./array";
 import { app } from "./bridge";
 import { recordFrontendDiagnostic } from "./frontendDiagnosticBridge";
-import type { TurnEventEnvelope, TurnEventReplayView, WireEvent } from "./types";
+import type { TurnEventEnvelope, TurnEventMeta, TurnEventReplayView, WireEvent } from "./types";
 
-type WireHandler = (event: WireEvent) => void;
+type WireHandler = (event: WireEvent, meta?: TurnEventMeta) => void;
 type ResetHandler = (tabId: string, replay: TurnEventReplayView) => Promise<boolean>;
+/** Told about every replay page as it lands, so a reader can state what the
+ *  durable record covers without opening a second event path of its own. */
+type ReplayObserver = (tabId: string, replay: TurnEventReplayView) => void;
 
 const MAX_REPLAY_PAGES = 32;
 
@@ -21,11 +24,14 @@ export class TurnEventProjector {
   private readonly projectingReplayByTab = new Set<string>();
   private handler: WireHandler = () => {};
   private resetHandler?: ResetHandler;
+  private replayObserver?: ReplayObserver;
 
   bind(handler: WireHandler) { this.handler = handler; }
   unbind(handler: WireHandler) { if (this.handler === handler) this.handler = () => {}; }
   bindReset(handler: ResetHandler) { this.resetHandler = handler; }
   unbindReset(handler: ResetHandler) { if (this.resetHandler === handler) this.resetHandler = undefined; }
+  bindReplayObserver(observer: ReplayObserver) { this.replayObserver = observer; }
+  unbindReplayObserver(observer: ReplayObserver) { if (this.replayObserver === observer) this.replayObserver = undefined; }
 
   release(tabId: string) {
     this.generationByTab.set(tabId, (this.generationByTab.get(tabId) ?? 0) + 1);
@@ -116,6 +122,10 @@ export class TurnEventProjector {
         this.sequenceByTab.set(tabId, cursor);
       }
 
+      // Coverage is published before the rows it describes, so no reader ever
+      // spends a frame showing a prefix as if it were the whole record.
+      this.replayObserver?.(tabId, replay);
+
       const envelopes = asArray(replay.events).slice().sort((a, b) => a.seq - b.seq);
       for (const envelope of envelopes) {
         if (envelope.seq <= cursor) continue;
@@ -168,7 +178,7 @@ export class TurnEventProjector {
         status: (envelope.status || durable.status) as WireEvent["status"],
         tabId,
         runtimeEpoch: envelope.runtimeEpoch ?? runtimeEpoch,
-      });
+      }, { createdAt: envelope.createdAt });
     } finally {
       this.projectingReplayByTab.delete(tabId);
     }

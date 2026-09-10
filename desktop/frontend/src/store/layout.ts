@@ -145,7 +145,7 @@ export function saveRightDockPreviewWidth(width: number): void {
 // widths, the sidebar button-press flag) is session-local state on this store
 // so resize lifecycles and their consumers read one source of truth; measured
 // footer height and viewport width live in the windowChrome store.
-export type RightDockMode = "context" | "files" | "changed" | "remote" | "browser";
+export type RightDockMode = "context" | "files" | "changed" | "remote" | "browser" | "trajectory";
 
 // terminalPanelOpen is independent from rightDockMode — the terminal is a
 // bottom drawer that coexists with the workspace panel, not a mode of it.

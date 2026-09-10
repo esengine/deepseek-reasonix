@@ -24,6 +24,7 @@ export const DOCK_ENTRIES: DockEntryConfig[] = [
   { id: "files", labelKey: "workspace.filesTab", defaultTab: "file" },
   { id: "changed", labelKey: "workspace.changedTab", defaultTab: "changed" },
   { id: "browser", labelKey: "rightDock.browser", defaultTab: "browser", requiresBrowser: true },
+  { id: "trajectory", labelKey: "rightDock.trajectory", defaultTab: "trajectory" },
 ];
 
 export function availableDockEntries(browserAvailable: boolean): DockEntryConfig[] {

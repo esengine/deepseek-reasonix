@@ -4861,6 +4861,13 @@
     {
       "kind": "css-marker",
       "name": "--reasonix-draggable",
+      "location": "desktop/frontend/src/components/TrajectoryPanel.css",
+      "class": "keep-business",
+      "owner": "rewritten to -webkit-app-region by scripts/shell-css.mjs for the Electron bundle"
+    },
+    {
+      "kind": "css-marker",
+      "name": "--reasonix-draggable",
       "location": "desktop/frontend/src/custom/features/heartbeat/heartbeat.css",
       "class": "keep-business",
       "owner": "rewritten to -webkit-app-region by scripts/shell-css.mjs for the Electron bundle"

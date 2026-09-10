@@ -60,7 +60,17 @@ export interface TurnEventEnvelope {
   submissionId?: string;
   transcriptRevision?: number;
   transcriptDigest?: string;
+  /** Unix ms recorded by the host when the durable event was appended. Present
+   *  on every replayed envelope; this is the only kernel-measured clock a
+   *  rebuilt view has, so a reader that needs real times must prefer it over
+   *  its own receipt time. */
+  createdAt?: number;
   event: WireEvent;
+}
+/** Kernel-measured facts that travel with a projected event but are not part of
+ *  the event itself. Only a replayed envelope carries one. */
+export interface TurnEventMeta {
+  createdAt?: number;
 }
 export interface TurnEventReplayView {
   events: TurnEventEnvelope[];
@@ -120,6 +130,8 @@ export interface WireTool {
   readOnly: boolean;
   truncated?: boolean;
   durationMs?: number;
+  /** Unix ms the kernel started the call; zero/absent when it never ran. */
+  startedAt?: number;
   partial?: boolean; // an early dispatch (name only) — a full one with args follows
   argChars?: number; // partial only: cumulative argument chars streamed so far
   refreshed?: boolean; // same-ID full dispatch with a preview recomputed after an earlier write
