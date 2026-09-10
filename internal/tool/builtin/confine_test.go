@@ -315,6 +315,66 @@ func TestManagedConfigWriteGatedOnApprover(t *testing.T) {
 	}
 }
 
+// TestManagedConfigWriteAsksEvenInsideRoots pins that a Reasonix-managed config
+// file stays gated behind the fresh per-write approval even when the write
+// roots already cover it: YOLO and a widened allow_write must never let an
+// agent rewrite config.toml silently.
+func TestManagedConfigWriteAsksEvenInsideRoots(t *testing.T) {
+	home := isolateBuiltinTestUserState(t)
+	if err := os.MkdirAll(filepath.Join(home, ".reasonix"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Default()
+	userConfig := config.UserConfigPath()
+	// The whole isolated home is a write root, config.toml included.
+	cfg.Sandbox.AllowWrite = []string{home}
+	managed := NewManagedConfigPaths(config.ReasonixManagedConfigPaths())
+	w := writeFile{roots: realRoots(cfg.WriteRootsForRoot(home)), managed: managed}
+	args, _ := json.Marshal(map[string]string{"path": userConfig, "content": "{}\n"})
+
+	// No approver: fails closed even though the path is inside the roots.
+	if _, err := w.Execute(context.Background(), args); err == nil || !strings.Contains(err.Error(), "interactive user approval") {
+		t.Fatalf("in-root managed config write without an approver should be denied, got: %v", err)
+	}
+	if _, err := os.Stat(userConfig); !os.IsNotExist(err) {
+		t.Fatalf("user config must not be created without approval, stat err=%v", err)
+	}
+
+	// Approved: the approver is consulted and the write lands.
+	approve := &stubConfigWriteApprover{allow: true}
+	ctx := tool.WithConfigWriteApprover(context.Background(), approve)
+	if _, err := w.Execute(ctx, args); err != nil {
+		t.Fatalf("approved in-root managed config write: %v", err)
+	}
+	if len(approve.asked) != 1 || approve.asked[0] != userConfig {
+		t.Fatalf("approver should be asked for the in-root config path, asked=%v", approve.asked)
+	}
+
+	// Declined: reason surfaces, nothing lands.
+	decline := &stubConfigWriteApprover{allow: false, reason: "the user declined this Reasonix config write"}
+	dctx := tool.WithConfigWriteApprover(context.Background(), decline)
+	if err := os.Remove(userConfig); err != nil {
+		t.Fatalf("remove approved config before declined write: %v", err)
+	}
+	if _, err := w.Execute(dctx, args); err == nil || !strings.Contains(err.Error(), "declined") {
+		t.Fatalf("declined in-root managed config write should surface the reason, got: %v", err)
+	}
+	if _, err := os.Stat(userConfig); !os.IsNotExist(err) {
+		t.Fatalf("declined config must not be created, stat err=%v", err)
+	}
+
+	// A plain file inside the roots still writes silently: the managed gate is
+	// file-level, not directory-level.
+	plain := filepath.Join(home, "notes.txt")
+	pargs, _ := json.Marshal(map[string]string{"path": plain, "content": "hi\n"})
+	if _, err := w.Execute(context.Background(), pargs); err != nil {
+		t.Fatalf("plain in-root write must not consult the approver: %v", err)
+	}
+	if len(approve.asked) != 1 {
+		t.Fatalf("plain in-root write must not reach the approver, asked=%v", approve.asked)
+	}
+}
+
 func TestBashSandboxConfinement(t *testing.T) {
 	if !sandbox.Available() {
 		t.Skip("OS sandbox not available")
