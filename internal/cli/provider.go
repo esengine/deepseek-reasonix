@@ -56,7 +56,7 @@ func (m *chatTUI) openProviderPicker() {
 		m.notice("provider: no configured providers")
 		return
 	}
-	m.quickPick = &quickPicker{kind: quickPickerProvider, title: "Select provider", items: items, selected: selected}
+	m.quickPick = &quickPicker{kind: quickPickerProvider, title: "Select provider", items: items, selected: selected, digitSelect: m.quickPickerYolo()}
 }
 
 // switchToProvider switches the session to the named provider's default model.
@@ -121,7 +121,7 @@ func (m *chatTUI) switchToProvider(name string) {
 	}
 	m.quickPick = &quickPicker{
 		kind: quickPickerProviderModel, title: fmt.Sprintf(i18n.M.ProviderPickLabel, name),
-		items: items, selected: selected,
+		items: items, selected: selected, digitSelect: m.quickPickerYolo(),
 	}
 }
 

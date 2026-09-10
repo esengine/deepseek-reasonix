@@ -41,6 +41,52 @@ func TestQuickPickerNavigationFilterAndConfirm(t *testing.T) {
 	}
 }
 
+// TestQuickPickerYoloDigitsCommit pins the YOLO-mode contract: with
+// digitSelect set and the list unfiltered, a bare digit picks that row
+// immediately (matching the approval banner's numbered shortcuts).
+func TestQuickPickerYoloDigitsCommit(t *testing.T) {
+	p := &quickPicker{
+		digitSelect: true,
+		items: []quickPickerItem{
+			{ID: "one", Label: "Alpha"},
+			{ID: "two", Label: "Beta"},
+			{ID: "three", Label: "Gamma"},
+		},
+	}
+	result := p.handleKey(tea.KeyPressMsg{Code: '2'})
+	if result.choice == nil || result.choice.ID != "two" {
+		t.Fatalf("digit 2 choice = %+v, want two", result.choice)
+	}
+	result = p.handleKey(tea.KeyPressMsg{Code: '9'})
+	if result.choice != nil {
+		t.Fatalf("digit 9 with 3 rows must not commit, got %+v", result.choice)
+	}
+}
+
+// TestQuickPickerYoloDigitsFilterAfterSearch pins that even in YOLO mode a
+// digit filters once a query is active: typing "2" to match a label must not
+// pick row 2.
+func TestQuickPickerYoloDigitsFilterAfterSearch(t *testing.T) {
+	p := &quickPicker{
+		digitSelect: true,
+		items: []quickPickerItem{
+			{ID: "one", Label: "Alpha"},
+			{ID: "two", Label: "Beta 22"},
+		},
+	}
+	p.handleKey(tea.KeyPressMsg{Code: 'b', Text: "b"})
+	if p.query != "b" {
+		t.Fatalf("query = %q, want b", p.query)
+	}
+	result := p.handleKey(tea.KeyPressMsg{Code: '2'})
+	if result.choice != nil {
+		t.Fatalf("digit while filtering must not commit, got %+v", result.choice)
+	}
+	if p.query != "b2" {
+		t.Fatalf("query = %q, want b2", p.query)
+	}
+}
+
 func TestQuickPickerVimKeysBecomeTextAfterSearchStarts(t *testing.T) {
 	p := &quickPicker{
 		selected: 1,

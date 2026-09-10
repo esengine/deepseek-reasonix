@@ -126,7 +126,7 @@ func (m *chatTUI) openModelPicker() {
 		}
 		items = append(items, quickPickerItem{ID: ref, Label: ref, Description: description, Status: status})
 	}
-	m.quickPick = &quickPicker{kind: quickPickerModel, title: "Select model", items: items, selected: selected}
+	m.quickPick = &quickPicker{kind: quickPickerModel, title: "Select model", items: items, selected: selected, digitSelect: m.quickPickerYolo()}
 }
 
 // persistModel writes ref (a "provider/model" string) to default_model in the

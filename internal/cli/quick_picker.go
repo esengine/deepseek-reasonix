@@ -6,9 +6,17 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"reasonix/internal/control"
 )
 
 const quickPickerMaxVisible = 8
+
+// quickPickerYolo reports whether the session's approval mode is YOLO; pickers
+// opened in that mode select rows by bare digit.
+func (m chatTUI) quickPickerYolo() bool {
+	return m.ctrl != nil && m.ctrl.ToolApprovalMode() == control.ToolApprovalYolo
+}
 
 type quickPickerKind string
 
@@ -27,7 +35,9 @@ type quickPickerItem struct {
 }
 
 // quickPicker is the shared single-choice overlay used by commands that need
-// Claude Code-style searchable lists inside Bubble Tea's event loop.
+// Claude Code-style searchable lists inside Bubble Tea's event loop. In YOLO
+// mode digitSelect is set: a lone digit picks the matching row immediately,
+// since the mode already opts out of confirmations. Otherwise digits filter.
 type quickPicker struct {
 	kind     quickPickerKind
 	title    string
@@ -35,6 +45,9 @@ type quickPicker struct {
 	items    []quickPickerItem
 	query    string
 	selected int // index in filteredItems, not items
+	// digitSelect commits a bare 1..9 key to that row when the list is
+	// unfiltered; set only when the active approval mode is YOLO.
+	digitSelect bool
 }
 
 type quickPickerResult struct {
@@ -105,6 +118,15 @@ func (p *quickPicker) handleKey(msg tea.KeyPressMsg) quickPickerResult {
 			s := msg.String()
 			if len(s) == 1 && s[0] >= 32 && s[0] < 127 {
 				text = s
+			}
+		}
+		// In YOLO mode digits pick the numbered row directly (the banner does
+		// the same); digits still filter once a query is active, so typing a
+		// digit to search can't commit row N.
+		if p.digitSelect && p.query == "" && len(text) == 1 && text[0] >= '1' && text[0] <= '9' {
+			if idx := int(text[0] - '1'); idx < len(items) {
+				choice := items[idx]
+				return quickPickerResult{choice: &choice}
 			}
 		}
 		if text != "" {
