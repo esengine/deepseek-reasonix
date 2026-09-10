@@ -301,7 +301,27 @@ func strongRecallMatch(query string, queryTerms, matched []string) bool {
 	if len(queryTerms) <= 2 && utf8.RuneCountInString(term) >= 6 {
 		return true
 	}
+	// A query that is exactly one two-rune CJK word (部署, 配置) matches by that
+	// complete word alone — the whole query is one bigram, not scattered common
+	// characters, so the lone-bigram floor must not suppress it.
+	if len(queryTerms) == 1 && isCJKBigram(term) {
+		return true
+	}
 	return distinctiveQueryTerm(query, term)
+}
+
+// isCJKBigram reports whether term is one two-rune CJK token: the shape of a
+// lone bigram when the whole query is a two-character CJK word.
+func isCJKBigram(term string) bool {
+	runes := []rune(term)
+	if len(runes) != 2 {
+		return false
+	}
+	return isCJKRune(runes[0]) && isCJKRune(runes[1])
+}
+
+func isCJKRune(r rune) bool {
+	return unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul)
 }
 
 func autoRecallSearchText(memory Memory) string {
@@ -411,8 +431,15 @@ func buildRecallBlock(hits []RecallHit, budget, omitted int) ([]RecallHit, strin
 	used := utf8.RuneCountInString(prefix + close)
 	for _, hit := range hits {
 		entry := recallEntry(hit, hit.Snippet)
+		if hit.Freshness == FreshnessStale {
+			entry = staleRecallEntry(hit)
+		}
 		remaining := budget - used
 		if utf8.RuneCountInString(entry) > remaining {
+			if hit.Freshness == FreshnessStale {
+				omitted++
+				continue
+			}
 			entry = clippedRecallEntry(hit, remaining)
 		}
 		if entry == "" {
@@ -445,6 +472,19 @@ func recallEntry(hit RecallHit, snippet string) string {
 		NormalizeFactScope(string(memory.Scope)), NormalizeType(string(memory.Type)),
 		hit.Freshness, hit.Score, html.EscapeString(hit.Reason),
 		html.EscapeString(displayTitle(memory.Title, memory.Name)), html.EscapeString(snippet))
+}
+
+// staleRecallEntry renders a stale hit as a pointer instead of a full fact:
+// its content may be outdated, so the model gets the identity and a hint to
+// re-read with the memory tool rather than a possibly-stale snippet. The
+// reason (matched terms) is kept so the model knows why it was recalled.
+func staleRecallEntry(hit RecallHit) string {
+	memory := hit.Memory
+	return fmt.Sprintf("- id=%s revision=%d scope=%s type=%s freshness=stale reason=%q\n  title: %s — stale; use the memory tool for details\n",
+		html.EscapeString(memory.ID), memory.Revision,
+		NormalizeFactScope(string(memory.Scope)), NormalizeType(string(memory.Type)),
+		html.EscapeString(hit.Reason),
+		html.EscapeString(displayTitle(memory.Title, memory.Name)))
 }
 
 func clippedRecallEntry(hit RecallHit, maxRunes int) string {

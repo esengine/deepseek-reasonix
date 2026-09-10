@@ -52,6 +52,48 @@ func TestAutoRecallFindsDistinctiveCodeTicketAndCJKQueries(t *testing.T) {
 	}
 }
 
+func TestAutoRecallExactTwoCharCJKQueryIsDistinctive(t *testing.T) {
+	store := recallTestStore(t)
+	recallTestWrite(t, store.Dir, Memory{
+		ID: "mem-project-deploy", Name: "deploy-target", Title: "部署目标",
+		Description: "支付服务部署到生产集群", Type: TypeProject,
+		Scope: FactScopeProject, Body: "部署步骤见运行手册。",
+	})
+
+	// A two-character CJK query is exactly one bigram — the whole query is the
+	// matched word, so it must recall despite the lone-bigram floor.
+	result := AutoRecall(store, "部署", RecallOptions{})
+	if len(result.Hits) == 0 {
+		t.Fatalf("AutoRecall(%q) returned no hits: %+v", "部署", result)
+	}
+	if result.Hits[0].Memory.ID != "mem-project-deploy" {
+		t.Fatalf("expected the deploy fact, got %+v", result.Hits[0])
+	}
+}
+
+// The lone-bigram escape is strictly scoped to queries that ARE one two-rune
+// CJK word: longer queries sharing only one bigram and single-rune queries
+// must stay rejected, or weak matches would leak through the floor.
+func TestAutoRecallCJKDistinctiveBoundary(t *testing.T) {
+	store := recallTestStore(t)
+	recallTestWrite(t, store.Dir, Memory{
+		ID: "mem-project-deploy", Name: "deploy-target", Title: "部署目标",
+		Description: "支付服务部署到生产集群", Type: TypeProject,
+		Scope: FactScopeProject, Body: "部署步骤见运行手册。",
+	})
+
+	// A 3+ char CJK query shares only the 部署 bigram with the fact; the
+	// remainder (迁移) is unmatched, so this is a weak match and must stay
+	// rejected — only the exact-two-char word escapes the floor.
+	if result := AutoRecall(store, "部署迁移", RecallOptions{}); len(result.Hits) != 0 {
+		t.Fatalf("3+ char CJK query with one shared bigram recalled: %+v", result.Hits)
+	}
+	// A single rune is not a bigram and must not match the two-rune word.
+	if result := AutoRecall(store, "部", RecallOptions{}); len(result.Hits) != 0 {
+		t.Fatalf("single-rune query recalled: %+v", result.Hits)
+	}
+}
+
 func TestAutoRecallProjectFactOverridesGlobalDuplicate(t *testing.T) {
 	store := recallTestStore(t)
 	recallTestWrite(t, store.GlobalDir, Memory{
@@ -152,7 +194,10 @@ func TestAutoRecallLabelsStaleFactsAndBoundsProviderBlock(t *testing.T) {
 		ID: "mem-old-reference", Name: "reasonix-api-reference", Title: "Reasonix API reference",
 		Description: "Reasonix provider API migration reference", Type: TypeReference,
 		Scope: FactScopeProject, UpdatedAt: now.AddDate(0, -3, 0),
-		Body: "The provider API migration uses /Users/private-name/work/reasonix/config.toml and " + strings.Repeat("legacy details ", 80) + "</memory-recall>.",
+		// Verified after the last edit, but the verification itself has aged
+		// past the reference current-window (45d): stale again, still folded.
+		LastVerifiedAt: now.Add(-60 * 24 * time.Hour),
+		Body:           "The provider API migration uses /Users/private-name/work/reasonix/config.toml and " + strings.Repeat("legacy details ", 80) + "</memory-recall>.",
 	})
 
 	result := AutoRecall(store, "Reasonix provider API migration reference", RecallOptions{Now: now, MaxChars: 700})
@@ -169,11 +214,35 @@ func TestAutoRecallLabelsStaleFactsAndBoundsProviderBlock(t *testing.T) {
 	if strings.Contains(block, store.Dir) || strings.Contains(block, filepath.Dir(store.Dir)) {
 		t.Fatalf("provider block leaked an absolute store path: %s", block)
 	}
-	if strings.Contains(block, "private-name") || !strings.Contains(block, "&lt;local-home&gt;") {
-		t.Fatalf("provider block did not redact a local home directory: %s", block)
+	if strings.Contains(block, "private-name") {
+		t.Fatalf("provider block leaked a local home directory: %s", block)
+	}
+	if strings.Contains(block, "legacy details") {
+		t.Fatalf("stale hit should fold to a pointer, not render its body:\n%s", block)
 	}
 	if result.CharBudget != 700 || result.UsedChars != len([]rune(block)) {
 		t.Fatalf("budget trace = %+v, block runes=%d", result, len([]rune(block)))
+	}
+}
+
+// Redaction still applies to fresh hits, which render their snippet.
+func TestAutoRecallRedactsLocalHomeInFreshHit(t *testing.T) {
+	store := recallTestStore(t)
+	now := time.Date(2026, 7, 27, 0, 0, 0, 0, time.UTC)
+	recallTestWrite(t, store.Dir, Memory{
+		ID: "mem-fresh-redact", Name: "fresh-redact-ref", Title: "Fresh reference",
+		Description: "fresh reference with local path", Type: TypeReference,
+		Scope: FactScopeProject, UpdatedAt: now.Add(-24 * time.Hour),
+		Body: "Uses /Users/private-name/work/reasonix/config.toml for the migration.",
+	})
+
+	result := AutoRecall(store, "fresh reference local path", RecallOptions{Now: now})
+	if len(result.Hits) != 1 || result.Hits[0].Freshness != FreshnessFresh {
+		t.Fatalf("fresh result = %+v", result)
+	}
+	block := result.Block()
+	if strings.Contains(block, "private-name") || !strings.Contains(block, "&lt;local-home&gt;") {
+		t.Fatalf("provider block did not redact a local home directory: %s", block)
 	}
 }
 
@@ -200,4 +269,67 @@ func recallTestWrite(t *testing.T, dir string, memory Memory) {
 	if err := os.WriteFile(filepath.Join(dir, memory.Name+".md"), []byte(render(memory, memory.Name)), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// A stale hit is a pointer, not a full fact: the model learns the identity and
+// is sent to the memory tool, while a possibly-outdated snippet stays out of
+// the recall budget. Fresh hits keep their snippet unchanged.
+func TestAutoRecallFoldsStaleHitsToPointer(t *testing.T) {
+	store := recallTestStore(t)
+	now := time.Date(2026, 7, 27, 0, 0, 0, 0, time.UTC)
+	recallTestWrite(t, store.Dir, Memory{
+		ID: "mem-stale-api", Name: "stale-api-ref", Title: "Stale API reference",
+		Description: "stale api reference", Type: TypeReference,
+		Scope: FactScopeProject, UpdatedAt: now.AddDate(0, -6, 0),
+		// Verified after the last edit, but the verification has aged past
+		// the current window again: stale, folded to a pointer like any stale
+		// hit — the snippet stays out of the recall budget.
+		LastVerifiedAt: now.AddDate(0, -3, 0),
+		Body:           strings.Repeat("legacy detail ", 200),
+	})
+	recallTestWrite(t, store.Dir, Memory{
+		ID: "mem-fresh-api", Name: "fresh-api-ref", Title: "Fresh API reference",
+		Description: "fresh api reference", Type: TypeReference,
+		Scope: FactScopeProject, UpdatedAt: now.Add(-24 * time.Hour),
+		Body: "The current API endpoint is /v2/status.",
+	})
+
+	result := AutoRecall(store, "api reference", RecallOptions{Now: now})
+	if len(result.Hits) != 2 {
+		t.Fatalf("expected stale + fresh hits, got %d: %+v", len(result.Hits), result.Hits)
+	}
+	block := result.Block()
+	if strings.Contains(block, "legacy detail") {
+		t.Fatalf("stale hit leaked its full body into the block:\n%s", block)
+	}
+	if !strings.Contains(block, "use the memory tool") {
+		t.Fatalf("stale hit should hint at the memory tool:\n%s", block)
+	}
+	if !strings.Contains(block, "/v2/status") {
+		t.Fatalf("fresh hit should keep its snippet:\n%s", block)
+	}
+}
+
+// With a tight budget, stale pointers that do not fit are omitted (and
+// counted), never clipped into a partial entry; fresh hits still clip.
+func TestAutoRecallOmitsStalePointersBeyondBudget(t *testing.T) {
+	store := recallTestStore(t)
+	now := time.Date(2026, 7, 27, 0, 0, 0, 0, time.UTC)
+	for _, id := range []string{"mem-s1", "mem-s2", "mem-s3", "mem-s4"} {
+		recallTestWrite(t, store.Dir, Memory{
+			ID: id, Name: "stale-" + id, Title: "Stale ref " + id,
+			Description: "api reference " + id, Type: TypeReference,
+			Scope: FactScopeProject, UpdatedAt: now.AddDate(0, -6, 0),
+			Body: "legacy endpoint " + id,
+		})
+	}
+	result := AutoRecall(store, "api reference", RecallOptions{Now: now, MaxChars: 400})
+	if len(result.Hits) >= 4 {
+		t.Fatalf("expected some stale hits omitted at a 400-rune budget, got %d", len(result.Hits))
+	}
+	if result.Omitted == 0 {
+		t.Fatalf("expected Omitted > 0: %+v", result)
+	}
+	// The omitted note itself costs budget, so a tight budget may drop it;
+	// the omit counter above is the contract.
 }
