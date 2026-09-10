@@ -1564,11 +1564,17 @@ func renderModelOverride(ov ProviderModelOverride) string {
 	if ov.MaxOutputTokens != 0 {
 		parts = append(parts, fmt.Sprintf("max_output_tokens = %d", ov.MaxOutputTokens))
 	}
+	if ov.Thinking != "" {
+		parts = append(parts, fmt.Sprintf("thinking = %q", ov.Thinking))
+	}
+	if len(ov.ExtraBody) > 0 {
+		parts = append(parts, "extra_body = "+renderAnyMap(ov.ExtraBody))
+	}
 	return "{ " + strings.Join(parts, ", ") + " }"
 }
 
 func modelOverrideEmpty(ov ProviderModelOverride) bool {
-	return ov.ReasoningProtocol == "" && len(ov.SupportedEfforts) == 0 && ov.DefaultEffort == "" && ov.Vision == nil && ov.ContextWindow <= 0 && ov.MaxOutputTokens == 0
+	return ov.ReasoningProtocol == "" && len(ov.SupportedEfforts) == 0 && ov.DefaultEffort == "" && ov.Vision == nil && ov.ContextWindow <= 0 && ov.MaxOutputTokens == 0 && ov.Thinking == "" && len(ov.ExtraBody) == 0
 }
 
 func hasPositiveIntMap(m map[string]int) bool {

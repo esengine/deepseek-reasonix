@@ -1432,6 +1432,13 @@ type ProviderModelOverride struct {
 	// MaxOutputTokens overrides the provider-wide output budget. Zero inherits;
 	// positive values set a cap and negative values omit optional wire limits.
 	MaxOutputTokens int `toml:"max_output_tokens"`
+	// ExtraBody merges per-model extra top-level JSON request body fields into
+	// the provider-level extra_body for this model. Model-level keys win over
+	// provider-level keys; omitted keys inherit the provider value.
+	ExtraBody map[string]any `toml:"extra_body"`
+	// Thinking overrides the provider-level thinking toggle for this model
+	// ("enabled" / "disabled"). Empty inherits the provider value.
+	Thinking string `toml:"thinking"`
 }
 
 // ModelList returns the models this provider exposes: the explicit `models` list,
@@ -1577,6 +1584,19 @@ func (e *ProviderEntry) applyModelOverride() {
 	}
 	if ov.MaxOutputTokens != 0 {
 		e.MaxOutputTokens = ov.MaxOutputTokens
+	}
+	if ov.Thinking != "" {
+		e.Thinking = ov.Thinking
+	}
+	if len(ov.ExtraBody) > 0 {
+		merged := make(map[string]any, len(e.ExtraBody)+len(ov.ExtraBody))
+		for k, v := range e.ExtraBody {
+			merged[k] = v
+		}
+		for k, v := range ov.ExtraBody {
+			merged[k] = v
+		}
+		e.ExtraBody = merged
 	}
 }
 

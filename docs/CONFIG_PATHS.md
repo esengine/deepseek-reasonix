@@ -174,6 +174,43 @@ If a gateway requires vendor-specific top-level request body fields, set
 are merged into the OpenAI-compatible chat JSON request body without allowing
 core fields such as `model`, `messages`, `tools`, or `stream` to be overridden.
 
+### Per-model overrides
+
+Multi-model providers may need different request body fields or thinking
+configuration per model. Use `model_overrides` to set per-model `context_window`,
+`max_output_tokens`, `reasoning_protocol`, `vision`, `extra_body`, and `thinking`.
+Model-level values override or merge with the provider-level values for that
+model only.
+
+```toml
+[[providers]]
+name     = "nvidia"
+kind     = "openai"
+base_url = "https://integrate.api.nvidia.com/v1"
+models   = ["minimaxai/minimax-m3", "z-ai/glm-5.2"]
+# No provider-level extra_body — each model opts in.
+
+[providers.model_overrides]
+"minimaxai/minimax-m3" = {
+  context_window   = 262000,
+  max_output_tokens = 16384,
+  extra_body       = { chat_template_kwargs = { thinking_mode = "enabled" } },
+}
+"z-ai/glm-5.2" = {
+  context_window   = 1000000,
+  max_output_tokens = 16384,
+  extra_body       = { chat_template_kwargs = { enable_thinking = true, clear_thinking = false } },
+}
+```
+
+**Merge rules for `extra_body`**: model-level keys are shallow-merged into
+provider-level keys. Model keys win on conflict; omitted keys inherit the
+provider value. Setting `extra_body = {}` on a model clears all provider-level
+keys for that model.
+
+**Merge rules for `thinking`**: a non-empty model-level value replaces the
+provider-level value; empty or omitted inherits the provider value.
+
 ## Global `.env`
 
 `<Reasonix home>/.env` is the single runtime source for provider API keys saved

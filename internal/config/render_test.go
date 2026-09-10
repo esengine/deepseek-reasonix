@@ -1173,6 +1173,145 @@ func TestRenderTOMLRoundTripsProviderHeadersAndModelOverrides(t *testing.T) {
 	}
 }
 
+func TestRenderModelOverrideExtraBodyAndThinking(t *testing.T) {
+	cfg := &Config{
+		Providers: []ProviderEntry{{
+			Name:      "nvidia",
+			Kind:      "openai",
+			BaseURL:   "https://integrate.api.nvidia.com/v1",
+			Models:    []string{"minimax-m3", "nemotron-super", "gemma4"},
+			APIKeyEnv: "NVIDIA_API_KEY",
+			Effort:    "high",
+			Vision:    true,
+			ModelOverrides: map[string]ProviderModelOverride{
+				"minimax-m3": {
+					ContextWindow:   262_000,
+					MaxOutputTokens: 16_384,
+					ExtraBody: map[string]any{
+						"chat_template_kwargs": map[string]any{"thinking_mode": "enabled"},
+					},
+				},
+				"nemotron-super": {
+					ContextWindow:   1_000_000,
+					MaxOutputTokens: 32_768,
+					ExtraBody: map[string]any{
+						"chat_template_kwargs": map[string]any{"enable_thinking": true},
+					},
+				},
+				"gemma4": {
+					ContextWindow:   256_000,
+					MaxOutputTokens: 32_768,
+					Thinking:        "enabled",
+					ExtraBody: map[string]any{
+						"chat_template_kwargs": map[string]any{"thinking": true},
+					},
+				},
+			},
+		}},
+	}
+
+	rendered := RenderTOML(cfg)
+	if !strings.Contains(rendered, `thinking = "enabled"`) {
+		t.Fatalf("rendered TOML missing thinking override:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, `extra_body`) || !strings.Contains(rendered, `thinking_mode`) {
+		t.Fatalf("rendered TOML missing per-model extra_body:\n%s", rendered)
+	}
+
+	var got Config
+	if _, err := toml.Decode(rendered, &got); err != nil {
+		t.Fatalf("rendered TOML does not parse: %v\n%s", err, rendered)
+	}
+	p, ok := got.Provider("nvidia")
+	if !ok {
+		t.Fatal("nvidia provider missing after round trip")
+	}
+	gemma4 := p.ModelOverrides["gemma4"]
+	if gemma4.Thinking != "enabled" {
+		t.Fatalf("gemma4 thinking = %q, want %q", gemma4.Thinking, "enabled")
+	}
+	minimax := p.ModelOverrides["minimax-m3"]
+	kwargs, ok := minimax.ExtraBody["chat_template_kwargs"].(map[string]any)
+	if !ok || kwargs["thinking_mode"] != "enabled" {
+		t.Fatalf("minimax-m3 extra_body chat_template_kwargs = %v", minimax.ExtraBody)
+	}
+	nemotron := p.ModelOverrides["nemotron-super"]
+	nkwargs, ok := nemotron.ExtraBody["chat_template_kwargs"].(map[string]any)
+	if !ok || nkwargs["enable_thinking"] != true {
+		t.Fatalf("nemotron-super extra_body chat_template_kwargs = %v", nemotron.ExtraBody)
+	}
+
+	// Verify legacy struct (no extra_body/thinking) still reads without error.
+	type legacyModelOverride struct {
+		ReasoningProtocol string   `toml:"reasoning_protocol"`
+		SupportedEfforts  []string `toml:"supported_efforts"`
+		DefaultEffort     string   `toml:"default_effort"`
+		Vision            *bool    `toml:"vision"`
+		ContextWindow     int      `toml:"context_window"`
+		MaxOutputTokens   int      `toml:"max_output_tokens"`
+	}
+	type legacyProvider struct {
+		ModelOverrides map[string]legacyModelOverride `toml:"model_overrides"`
+	}
+	var legacy struct {
+		Providers []legacyProvider `toml:"providers"`
+	}
+	if _, err := toml.Decode(rendered, &legacy); err != nil {
+		t.Fatalf("legacy config shape cannot read per-model extra_body/thinking: %v", err)
+	}
+}
+
+func TestApplyModelOverrideMergesExtraBody(t *testing.T) {
+	e := &ProviderEntry{
+		Thinking: "enabled",
+		ExtraBody: map[string]any{
+			"min_p":          0.01,
+			"parallel_calls": true,
+		},
+		ModelOverrides: map[string]ProviderModelOverride{
+			"model-a": {
+				Thinking: "disabled",
+				ExtraBody: map[string]any{
+					"min_p":     0.05,
+					"custom_fn": "hello",
+				},
+			},
+			"model-b": {}, // no override — inherits provider
+		},
+	}
+
+	// model-a: thinking overridden, extra_body merged (model keys win)
+	e.Model = "model-a"
+	e.applyModelOverride()
+	if e.Thinking != "disabled" {
+		t.Fatalf("model-a thinking = %q, want %q", e.Thinking, "disabled")
+	}
+	if mp, ok := e.ExtraBody["min_p"]; !ok || mp != 0.05 {
+		t.Fatalf("model-a min_p = %v, want 0.05 (model wins)", mp)
+	}
+	if v, ok := e.ExtraBody["parallel_calls"]; !ok || v != true {
+		t.Fatalf("model-a parallel_calls = %v, want true (inherited from provider)", v)
+	}
+	if v, ok := e.ExtraBody["custom_fn"]; !ok || v != "hello" {
+		t.Fatalf("model-a custom_fn = %v, want hello (added by override)", v)
+	}
+
+	// model-b: no override — provider values intact
+	e.Model = "model-b"
+	e.Thinking = "enabled"
+	e.ExtraBody = map[string]any{
+		"min_p":          0.01,
+		"parallel_calls": true,
+	}
+	e.applyModelOverride()
+	if e.Thinking != "enabled" {
+		t.Fatalf("model-b thinking = %q, want %q (unchanged)", e.Thinking, "enabled")
+	}
+	if mp, ok := e.ExtraBody["min_p"]; !ok || mp != 0.01 {
+		t.Fatalf("model-b min_p = %v, want 0.01 (unchanged)", mp)
+	}
+}
+
 func TestRenderStringMapQuotesNonBareTOMLKeys(t *testing.T) {
 	rendered := renderStringMap(map[string]string{
 		"github:gh-fix-ci": "deepseek-pro",

@@ -469,6 +469,53 @@ extra_body  = { enable_thinking = true }
 fields such as `model`, `messages`, `tools`, `stream`, and `thinking` under its
 own control.
 
+### Per-model overrides
+
+Multi-model providers may host models with incompatible reasoning wires under
+a single base URL. For example, on NVIDIA NIM one model may need
+`chat_template_kwargs.thinking_mode` while another needs
+`chat_template_kwargs.enable_thinking`, and a third needs neither.
+
+Use `model_overrides` to set per-model values for `context_window`,
+`max_output_tokens`, `reasoning_protocol`, `supported_efforts`, `default_effort`,
+`vision`, `extra_body`, and `thinking`. Model-level values override or merge with
+the provider-level values for that model only.
+
+```toml
+[[providers]]
+name        = "nvidia"
+kind        = "openai"
+base_url    = "https://integrate.api.nvidia.com/v1"
+models      = ["minimaxai/minimax-m3", "z-ai/glm-5.2", "deepseek-ai/deepseek-v4-flash"]
+api_key_env = "NVIDIA_API_KEY"
+# No provider-level extra_body or thinking — each model opts in.
+
+[providers.model_overrides]
+"minimaxai/minimax-m3" = {
+  context_window   = 262000,
+  max_output_tokens = 16384,
+  extra_body       = { chat_template_kwargs = { thinking_mode = "enabled" } },
+}
+"z-ai/glm-5.2" = {
+  context_window   = 1000000,
+  max_output_tokens = 16384,
+  extra_body       = { chat_template_kwargs = { enable_thinking = true, clear_thinking = false } },
+}
+"deepseek-ai/deepseek-v4-flash" = {
+  context_window   = 1000000,
+  max_output_tokens = 128000,
+  extra_body       = { chat_template_kwargs = { thinking = true, reasoning_effort = "max" } },
+}
+```
+
+**Merge rules for `extra_body`**: model-level keys are shallow-merged into
+provider-level keys. Model keys win on conflict; omitted keys inherit the
+provider value. Setting `extra_body = {}` on a model clears all provider-level
+keys for that model.
+
+**Merge rules for `thinking`**: a non-empty model-level value replaces the
+provider-level value; empty or omitted inherits the provider value.
+
 ## Desktop hooks
 
 Desktop hooks run local commands at lifecycle events such as `SessionStart`,
