@@ -3122,6 +3122,88 @@ func TestSetEffortForTabReanchorsDepthCapRecoveryBranch(t *testing.T) {
 	}
 }
 
+func TestSetEffortForTabSameLevelShortCircuit(t *testing.T) {
+	isolateDesktopUserDirs(t)
+	setDesktopTestCredential(t, "OLD_MODEL_KEY", "sk-test")
+
+	cfg := config.Default()
+	cfg.DefaultModel = "old/old-model"
+	cfg.Desktop.ProviderAccess = []string{"old"}
+	cfg.Providers = []config.ProviderEntry{{
+		Name:             "old",
+		Kind:             "openai",
+		BaseURL:          "https://example.invalid/v1",
+		Model:            "old-model",
+		APIKeyEnv:        "OLD_MODEL_KEY",
+		SupportedEfforts: []string{"low", "max"},
+	}}
+	if err := cfg.SaveTo(config.UserConfigPath()); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
+
+	dir := config.SessionDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir session dir: %v", err)
+	}
+	exec := agent.New(nil, nil, agent.NewSession("old system prompt"), agent.Options{}, event.Discard)
+
+	app := NewApp()
+	app.ctx = context.Background()
+	app.runtimeEvents.emit = func(context.Context, string, ...any) {}
+	tab := &WorkspaceTab{
+		ID:          "tab_effort_short_circuit",
+		Scope:       "global",
+		Ready:       true,
+		model:       "old/old-model",
+		disabledMCP: map[string]ServerView{},
+	}
+	tab.sink = &tabEventSink{tabID: tab.ID, app: app}
+	tab.Ctrl = control.New(control.Options{
+		Executor:    exec,
+		SessionDir:  dir,
+		SessionPath: filepath.Join(dir, "effort-short-circuit.jsonl"),
+		Label:       "old",
+		Sink:        tab.sink,
+	})
+	app.tabs = map[string]*WorkspaceTab{tab.ID: tab}
+	app.tabOrder = []string{tab.ID}
+	app.activeTabID = tab.ID
+	t.Cleanup(func() {
+		tab.Ctrl.Close()
+		tab.releaseSessionLease()
+	})
+
+	if err := app.SetEffortForTab(tab.ID, "max"); err != nil {
+		t.Fatalf("SetEffortForTab max: %v", err)
+	}
+	if tab.effort == nil || *tab.effort != "max" {
+		t.Fatalf("tab effort after switch = %v, want max", tab.effort)
+	}
+	// Let any post-rebuild async settle so the short-circuit assertion below
+	// compares against a quiescent tab.
+	time.Sleep(500 * time.Millisecond)
+	rebuilt := tab.Ctrl
+	t.Logf("before-second: ctrl=%p rebuilt=%p", tab.Ctrl, rebuilt)
+
+	// Same level again: the short circuit must keep the running controller
+	// instead of paying for a full runtime rebuild.
+	if err := app.SetEffortForTab(tab.ID, "max"); err != nil {
+		t.Fatalf("SetEffortForTab same level: %v", err)
+	}
+	t.Logf("after-second: ctrl=%p rebuilt=%p tab.effort=%v", tab.Ctrl, rebuilt, tab.effort)
+	if tab.Ctrl != rebuilt {
+		t.Fatal("same-level effort switch rebuilt the controller")
+	}
+
+	// A genuinely different depth still rebuilds.
+	if err := app.SetEffortForTab(tab.ID, "low"); err != nil {
+		t.Fatalf("SetEffortForTab low: %v", err)
+	}
+	if tab.Ctrl == rebuilt {
+		t.Fatal("different-level effort switch kept the controller")
+	}
+}
+
 func TestRemoveBuiltInProviderAccessRetargetsDefaultToRemainingAccess(t *testing.T) {
 	isolateDesktopUserDirs(t)
 	setDesktopTestCredential(t, "MIMO_API_KEY", "sk-test")

@@ -9677,6 +9677,19 @@ func (a *App) SetEffortForTab(tabID, level string) error {
 	defer a.runtimeRebuildMu.Unlock()
 	tab.turnStartMu.Lock()
 	defer tab.turnStartMu.Unlock()
+	// Same-level short circuit, before any attach/workspace side effects:
+	// switching to the depth this tab already runs must not pay for a full
+	// runtime rebuild (nor even re-enter the attach/workspace paths). tab.effort
+	// holds the depth the tab currently runs — seeded from the provider entry at
+	// attach time and rewritten by every effort/model switch.
+	if tab.effort != nil {
+		if entry, err := a.currentProviderEntryForTab(tabID); err == nil {
+			if effort, err := config.NormalizeEffort(entry, level); err == nil &&
+				strings.EqualFold(strings.TrimSpace(*tab.effort), effort) {
+				return nil
+			}
+		}
+	}
 	prevPath := a.reconciledSessionPathForTab(tab)
 	if prevPath == "" {
 		prevPath = a.currentSessionPathFor(tab)
