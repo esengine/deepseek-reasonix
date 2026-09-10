@@ -337,14 +337,14 @@
 
   /* Sticky because the rows are the scrolling part: a field that scrolls away
      takes the query out of sight while its result is still on screen. */
-  .mfind {
+  .menu .mfind {
     position: sticky; top: -5px; z-index: 1; width: calc(100% + 10px);
     margin: -5px -5px 5px; padding: 9px 11px;
     border: 0; border-bottom: 1px solid var(--hair); border-radius: var(--r-md) var(--r-md) 0 0;
     background: var(--float); color: var(--text); font: var(--w-reg) 12.5px var(--ui);
   }
-  .mfind:focus { outline: none }
-  .mfind::placeholder { color: var(--ghost) }
+  .menu .mfind:focus { outline: none }
+  .menu .mfind::placeholder { color: var(--ghost) }
   /* What Enter takes while the field still holds focus. Deliberately the same
      weight as hover: it is a standing offer, not a selection. */
   .mi[data-lead] { background: var(--overlay) }
@@ -3554,13 +3554,13 @@
   /* 模型库：按端点分组，一行一个模型。同一台主机被两种协议接进来是一个服务的
      两条路由，所以折成一行，协议退到行尾的下拉里 —— 平铺会让同名模型出现两次，
      而两行之间没有任何可判断的差别。 */
-  .mfind { display: flex; align-items: center; gap: 10px; margin-bottom: 12px }
-  .mfind input {
+  .mfind, .models-find { display: flex; align-items: center; gap: 10px; margin-bottom: 12px }
+  .mfind input, .models-find input {
     flex: 1; min-width: 0; padding: 6px 10px; border: 1px solid var(--border);
     border-radius: var(--r-sm); background: var(--raised); color: var(--text); font: var(--w-reg) 12px var(--ui);
   }
-  .mfind input:focus { outline: 2px solid var(--focus); outline-offset: 1px }
-  .mfind .cnt { flex: none; font: var(--w-reg) 11px var(--mono); color: var(--faint) }
+  .mfind input:focus, .models-find input:focus { outline: 2px solid var(--focus); outline-offset: 1px }
+  .mfind .cnt, .models-find .cnt { flex: none; font: var(--w-reg) 11px var(--mono); color: var(--faint) }
 
   .mgrp { margin-bottom: 12px; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden;
     animation: card var(--t-card) var(--ease-out) both }
