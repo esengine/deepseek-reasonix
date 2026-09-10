@@ -266,6 +266,13 @@ stalled_warning_seconds = 900   # heads-up once per background job after this ma
 # token_env = "WEIXIN_BOT_TOKEN"
 # api_base  = "https://ilinkai.weixin.qq.com"   # Tencent iLink Bot API base URL
 
+# Rewind snapshot retention (see docs/CHECKPOINTS.md). Both are optional; omit
+# or leave at 0 to keep the built-in defaults. A protected or current turn may
+# temporarily exceed the byte budget.
+# [checkpoints]
+# retain_turns     = 100          # turns of file payloads to keep
+# blob_quota_bytes = 1073741824   # 1 GiB soft budget
+
 [serve]
 # Authentication for the HTTP serve frontend (reasonix serve).
 # auth_mode = "none"      # none | token | password

@@ -91,8 +91,10 @@ type Checkpoint struct {
   an expired turn as one directory. Raw v3 preimages also have a soft 1 GiB
   budget; the current or transaction-protected turn may temporarily exceed it,
   and older whole turns are removed once they are unprotected. Legacy blobs use
-  the same budget value in their separate compatibility store. Session cleanup
-  removes the whole sidecar.
+  the same budget value in their separate compatibility store. Both limits are
+  configurable via `[checkpoints]` (`retain_turns`, `blob_quota_bytes`); an
+  omitted or non-positive value keeps the default, so `retain_turns = 0` does
+  not disable retention. Session cleanup removes the whole sidecar.
 
 ## Controller API (the one seam both frontends drive)
 
@@ -175,5 +177,3 @@ re-render uniformly.
 ## Open questions
 
 - Snapshot on `/compact` and on `NewSession` boundaries?
-- Whether to expose the 100-turn retention and 1 GiB soft byte limits in
-  `[checkpoints]` config.

@@ -1024,7 +1024,7 @@ func ckptDir(sessionPath string) string {
 // Also re-wires the mutation observer so capture targets the new store.
 func (c *Controller) rebindCheckpoints(sessionPath string) {
 	c.goals.setStatePath(goalStatePath(sessionPath))
-	c.checkpoints.rebind(ckptDir(sessionPath), c.workspaceRoot)
+	c.checkpoints.rebind(ckptDir(sessionPath), c.workspaceRoot, c.checkpointOptions()...)
 	c.rebindTurnEvents(sessionPath)
 	if c.executor != nil {
 		c.wireMutationObserver()

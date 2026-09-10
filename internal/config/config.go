@@ -55,6 +55,7 @@ type Config struct {
 	Agent            AgentConfig         `toml:"agent"`
 	Providers        []ProviderEntry     `toml:"providers"`
 	Tools            ToolsConfig         `toml:"tools"`
+	Checkpoints      CheckpointsConfig   `toml:"checkpoints"`
 	Permissions      PermissionsConfig   `toml:"permissions"`
 	Sandbox          SandboxConfig       `toml:"sandbox"`
 	Network          NetworkConfig       `toml:"network"`
@@ -705,6 +706,16 @@ type LSPServer struct {
 // status data row. A JSON payload (model, context tokens, cwd) is fed on stdin.
 type StatuslineConfig struct {
 	Command string `toml:"command"`
+}
+
+// CheckpointsConfig tunes rewind snapshot retention. Zero values leave the
+// built-in defaults in place (100 turns, 1 GiB soft budget).
+type CheckpointsConfig struct {
+	// RetainTurns caps how many turns of file payloads are kept.
+	RetainTurns int `toml:"retain_turns"`
+	// BlobQuotaBytes is the soft byte budget for retained file payloads. A
+	// protected or current turn may temporarily exceed it.
+	BlobQuotaBytes int64 `toml:"blob_quota_bytes"`
 }
 
 // BotConfig 控制多渠道 IM bot 消息网关。
