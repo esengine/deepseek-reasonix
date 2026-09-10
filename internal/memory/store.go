@@ -200,7 +200,7 @@ func (s Store) archiveLocked(name string) (string, error) {
 	ref := strings.TrimSpace(name)
 	parsed := parseMemoryReference(ref)
 	if active, path, ok := s.findActive(ref); ok && ref == active.ID {
-		return archiveMemoryInDir(filepath.Dir(path), active.Name)
+		return s.archiveByID(active.Name, ref)
 	} else if ok && parsed.qualified {
 		return archiveMemoryInDir(filepath.Dir(path), active.Name)
 	} else if ok {
