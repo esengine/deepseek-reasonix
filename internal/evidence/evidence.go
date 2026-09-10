@@ -1812,12 +1812,51 @@ func bashMayMutate(command string) bool {
 		if normalized == "" {
 			normalized = segment
 		}
-		if fields, ok := bashStaticArgv(normalized); ok && bashSegmentIsVerification(fields) {
-			continue
+		if fields, ok := bashStaticArgv(normalized); ok {
+			if bashSegmentIsVerification(fields) {
+				continue
+			}
+		} else {
+			// Static argv parsing failed (e.g. go test ./... contains
+			// unparseable package patterns). Fall back to a lenient base-
+			// command check: if the segment starts with a known verifier
+			// and has no obvious mutation flags, treat it as verification.
+			if bashBaseLooksLikeVerification(normalized) {
+				continue
+			}
 		}
 		if shellsafe.ClassifyBash(segment).AnyMutation() {
 			return true
 		}
+	}
+	return false
+}
+
+// bashBaseIsVerificationLenient does a lenient check on just the command base
+// when bashStaticArgv cannot parse the full argument list (e.g. due to glob
+// patterns like ./...). It checks the base command name and the second
+// argument (subcommand) against known verifiers.
+func bashBaseLooksLikeVerification(segment string) bool {
+	fields, _, ok := shellsafe.CommandArgv(segment)
+	if !ok || len(fields) < 2 {
+		return false
+	}
+	base := strings.ToLower(filepath.Base(fields[0]))
+	sub := fields[1]
+	// Known verifier base+subcommand pairs
+	switch base {
+	case "go":
+		return sub == "test" || sub == "vet"
+	case "git":
+		return sub == "diff" && len(fields) > 2 && fields[2] == "--check"
+	case "npm", "pnpm", "yarn", "bun":
+		return sub == "test" || sub == "check" || sub == "lint" || sub == "run"
+	case "make", "just":
+		return sub == "test" || sub == "check" || sub == "lint" || sub == "verify" || sub == "ci"
+	case "cargo":
+		return sub == "test" || sub == "check" || sub == "clippy"
+	case "python", "python3":
+		return sub == "-m" && len(fields) > 2 && (fields[2] == "pytest" || fields[2] == "unittest")
 	}
 	return false
 }
