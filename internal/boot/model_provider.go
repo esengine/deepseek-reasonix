@@ -58,6 +58,8 @@ func newProviderWithSearchMode(e *config.ProviderEntry, proxy netclient.ProxySpe
 		Extra: map[string]any{
 			"api_key_env":        e.APIKeyEnv,
 			"api_key_source":     e.APIKeySourceLabel(),
+			"user_id":            e.CacheContextValue(),
+			"session_id":         e.SessionContextValue(),
 			"thinking":           e.Thinking,
 			"effort":             config.EffectiveEffort(e),
 			"supported_efforts":  e.SupportedEfforts,

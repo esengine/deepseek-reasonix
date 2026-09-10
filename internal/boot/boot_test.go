@@ -1494,6 +1494,196 @@ func TestNewProviderAppliesConfiguredDefaultEffort(t *testing.T) {
 	}
 }
 
+// Effect test for cachecontext: a project-local cachecontext must reach the
+// provider wire as user_id through the real boot assembly (shared provider
+// entry defined once in the user config).
+func TestNewProviderPropagatesProjectCacheContextAsUserID(t *testing.T) {
+	var gotReq map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotReq); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+
+	home := t.TempDir()
+	t.Setenv("REASONIX_HOME", home)
+	userCfg := `default_model = "gateway/m"
+
+[[providers]]
+name        = "gateway"
+kind        = "openai"
+base_url    = "` + srv.URL + `"
+model       = "m"
+api_key_env = "GATEWAY_API_KEY"
+`
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(userCfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+	if err := os.WriteFile(filepath.Join(project, "reasonix.toml"), []byte("cachecontext = \"proj-gamma\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.LoadForRoot(project)
+	if err != nil {
+		t.Fatalf("LoadForRoot: %v", err)
+	}
+	entry := &cfg.Providers[0]
+	if entry.Name != "gateway" {
+		t.Fatalf("provider = %q, want gateway", entry.Name)
+	}
+	if got := entry.CacheContextValue(); got != "proj-gamma" {
+		t.Fatalf("CacheContextValue = %q, want %q", got, "proj-gamma")
+	}
+
+	p, err := NewProvider(entry)
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	ch, err := p.Stream(context.Background(), provider.Request{
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	for chunk := range ch {
+		if chunk.Type == provider.ChunkError {
+			t.Fatalf("stream error: %v", chunk.Err)
+		}
+	}
+	if got := gotReq["user"]; got != "proj-gamma" {
+		t.Fatalf("wire user = %#v, want %q", got, "proj-gamma")
+	}
+}
+
+// Effect test for the auto cachecontext default: a workspace that configures no
+// cachecontext must still emit "<user>:<repo-path>" as user_id on the wire,
+// honoring the $LOGNAME username override.
+func TestNewProviderSendsAutoCacheContextWhenUnset(t *testing.T) {
+	t.Setenv("LOGNAME", "wire-user")
+	var gotReq map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotReq); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+
+	home := t.TempDir()
+	t.Setenv("REASONIX_HOME", home)
+	userCfg := `default_model = "gateway/m"
+
+[[providers]]
+name        = "gateway"
+kind        = "openai"
+base_url    = "` + srv.URL + `"
+model       = "m"
+api_key_env = "GATEWAY_API_KEY"
+`
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(userCfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+
+	cfg, err := config.LoadForRoot(project)
+	if err != nil {
+		t.Fatalf("LoadForRoot: %v", err)
+	}
+	entry := &cfg.Providers[0]
+	if entry.Name != "gateway" {
+		t.Fatalf("provider = %q, want gateway", entry.Name)
+	}
+	want := cfg.EffectiveCacheContext(project)
+	if want == "" {
+		t.Fatal("auto cachecontext default is empty")
+	}
+
+	p, err := NewProvider(entry)
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	ch, err := p.Stream(context.Background(), provider.Request{
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	for chunk := range ch {
+		if chunk.Type == provider.ChunkError {
+			t.Fatalf("stream error: %v", chunk.Err)
+		}
+	}
+	if got := gotReq["user"]; got != want {
+		t.Fatalf("wire user = %#v, want auto %q", got, want)
+	}
+}
+
+// Effect test for the derived OpenRouter session_id: the auto "<user>:<repo>"
+// id must reach the OpenAI-compatible wire as the top-level session_id through
+// the real boot assembly, exactly like user_id.
+func TestNewProviderPropagatesSessionID(t *testing.T) {
+	var gotReq map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotReq); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\ndata: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+
+	home := t.TempDir()
+	t.Setenv("REASONIX_HOME", home)
+	t.Setenv("LOGNAME", "wire-user")
+	userCfg := `default_model = "gateway/m"
+
+[[providers]]
+name        = "gateway"
+kind        = "openai"
+base_url    = "` + srv.URL + `"
+model       = "m"
+api_key_env = "GATEWAY_API_KEY"
+`
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte(userCfg), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+
+	cfg, err := config.LoadForRoot(project)
+	if err != nil {
+		t.Fatalf("LoadForRoot: %v", err)
+	}
+	entry := &cfg.Providers[0]
+	want := cfg.EffectiveSessionContext(project)
+	if want == "" {
+		t.Fatal("auto session id default is empty")
+	}
+
+	p, err := NewProvider(entry)
+	if err != nil {
+		t.Fatalf("NewProvider: %v", err)
+	}
+	ch, err := p.Stream(context.Background(), provider.Request{
+		Messages: []provider.Message{{Role: provider.RoleUser, Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("Stream: %v", err)
+	}
+	for chunk := range ch {
+		if chunk.Type == provider.ChunkError {
+			t.Fatalf("stream error: %v", chunk.Err)
+		}
+	}
+	if got := gotReq["session_id"]; got != want {
+		t.Fatalf("wire session_id = %#v, want auto %q", got, want)
+	}
+}
+
 func TestNewProviderPreservesExplicitlySupportedKimiK3Efforts(t *testing.T) {
 	var gotReq map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -3220,7 +3410,7 @@ allow = ["Bash(user)"]
 
 	const rule = "Edit(src/app.go)"
 	res := rememberPermissionRule(workspace, rule)
-	if !res.Saved || res.Path != filepath.Join(workspace, "reasonix.toml") {
+	if !res.Saved || res.Path != filepath.Join(workspace, ".reasonix", "config.toml") {
 		t.Fatalf("remember result = %+v, want saved to workspace config", res)
 	}
 
@@ -3228,7 +3418,7 @@ allow = ["Bash(user)"]
 	if hasPermissionRule(userCfg.Permissions.Allow, rule) {
 		t.Fatalf("workspace rule was written to user config: %v", userCfg.Permissions.Allow)
 	}
-	workspaceCfg := config.LoadForEdit(filepath.Join(workspace, "reasonix.toml"))
+	workspaceCfg := config.LoadForEdit(filepath.Join(workspace, ".reasonix", "config.toml"))
 	if !hasPermissionRule(workspaceCfg.Permissions.Allow, rule) {
 		t.Fatalf("workspace rule missing from project config: %v", workspaceCfg.Permissions.Allow)
 	}

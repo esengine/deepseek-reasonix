@@ -42,31 +42,39 @@ func SkillNameKey(name string) string {
 
 // Config is Reasonix's runtime configuration.
 type Config struct {
-	ConfigVersion    int                 `toml:"config_version"`
-	DefaultModel     string              `toml:"default_model"`
-	Language         string              `toml:"language"` // ui/model language tag (e.g. "zh"); empty = auto-detect from $LANG / $REASONIX_LANG
-	CredentialsStore string              `toml:"credentials_store"`
-	UI               UIConfig            `toml:"ui"`
-	CLI              CLIConfig           `toml:"cli"`
-	Desktop          DesktopConfig       `toml:"desktop"`
-	Billing          BillingConfig       `toml:"billing"`
-	Telemetry        TelemetryConfig     `toml:"telemetry"`
-	Notifications    NotificationsConfig `toml:"notifications"`
-	Agent            AgentConfig         `toml:"agent"`
-	Providers        []ProviderEntry     `toml:"providers"`
-	Tools            ToolsConfig         `toml:"tools"`
-	Permissions      PermissionsConfig   `toml:"permissions"`
-	Sandbox          SandboxConfig       `toml:"sandbox"`
-	Network          NetworkConfig       `toml:"network"`
-	Environment      EnvironmentConfig   `toml:"environment"`
-	Plugins          []PluginEntry       `toml:"plugins"`
-	Skills           SkillsConfig        `toml:"skills"`
-	Statusline       StatuslineConfig    `toml:"statusline"`
-	LSP              LSPConfig           `toml:"lsp"`
-	Bot              BotConfig           `toml:"bot"`
-	Serve            ServeConfig         `toml:"serve"`
-	Secrets          SecretsConfig       `toml:"secrets"`
-	Remote           RemoteConfig        `toml:"remote"`
+	ConfigVersion    int    `toml:"config_version"`
+	DefaultModel     string `toml:"default_model"`
+	Language         string `toml:"language"` // ui/model language tag (e.g. "zh"); empty = auto-detect from $LANG / $REASONIX_LANG
+	CredentialsStore string `toml:"credentials_store"`
+	// CacheContext is a per-workspace user attribution id (DeepSeek user_id /
+	// OpenAI user); project config sets it so shared providers need not repeat.
+	CacheContext string `toml:"cachecontext"`
+	// LogName and User both override the username in the auto cachecontext
+	// default (repo config wins over user-global, then $LOGNAME, then the
+	// system account). logname prevails when both are set; see loadForRoot.
+	LogName       string              `toml:"logname"`
+	User          string              `toml:"user"`
+	UI            UIConfig            `toml:"ui"`
+	CLI           CLIConfig           `toml:"cli"`
+	Desktop       DesktopConfig       `toml:"desktop"`
+	Billing       BillingConfig       `toml:"billing"`
+	Telemetry     TelemetryConfig     `toml:"telemetry"`
+	Notifications NotificationsConfig `toml:"notifications"`
+	Agent         AgentConfig         `toml:"agent"`
+	Providers     []ProviderEntry     `toml:"providers"`
+	Tools         ToolsConfig         `toml:"tools"`
+	Permissions   PermissionsConfig   `toml:"permissions"`
+	Sandbox       SandboxConfig       `toml:"sandbox"`
+	Network       NetworkConfig       `toml:"network"`
+	Environment   EnvironmentConfig   `toml:"environment"`
+	Plugins       []PluginEntry       `toml:"plugins"`
+	Skills        SkillsConfig        `toml:"skills"`
+	Statusline    StatuslineConfig    `toml:"statusline"`
+	LSP           LSPConfig           `toml:"lsp"`
+	Bot           BotConfig           `toml:"bot"`
+	Serve         ServeConfig         `toml:"serve"`
+	Secrets       SecretsConfig       `toml:"secrets"`
+	Remote        RemoteConfig        `toml:"remote"`
 
 	systemPromptFileSource     promptFileSource
 	providerSources            map[string]providerSourceScope
@@ -1347,6 +1355,8 @@ type ProviderEntry struct {
 	credentialsFrozen  bool
 	credentialProxyURL string // runtime-only loopback transport, never persisted
 	resolvedSource     CredentialSource
+	cacheContext       string // workspace user attribution id (Config.CacheContext), set at load; sent as user_id
+	sessionContext     string // derived per-workspace OpenRouter session_id, set at load; sent as session_id
 	BalanceURL         string `toml:"balance_url"` // optional; a provider-specific wallet-balance endpoint (DeepSeek: https://api.deepseek.com/user/balance). Empty = no balance readout.
 	ContextWindow      int    `toml:"context_window"`
 	// MaxOutputTokens is a protocol-neutral total output budget for one turn.
@@ -2085,6 +2095,26 @@ func (c *Config) ResolveDesktopNewSessionModel() (resolvedRef string, fallback b
 	return c.resolveNewSessionChatModel(func(name string) bool {
 		return c.Desktop.ProviderAccess == nil || access[strings.TrimSpace(name)]
 	}, false)
+}
+
+// CacheContextValue returns the workspace user attribution id assigned at load
+// (Config.CacheContext). Empty when unset or the entry was built outside a
+// workspace config.
+func (e *ProviderEntry) CacheContextValue() string {
+	if e == nil {
+		return ""
+	}
+	return e.cacheContext
+}
+
+// SessionContextValue returns the derived OpenRouter session_id assigned at
+// load (Config.EffectiveSessionContext). Empty when the entry was built outside
+// a workspace config.
+func (e *ProviderEntry) SessionContextValue() string {
+	if e == nil {
+		return ""
+	}
+	return e.sessionContext
 }
 
 // APIKey resolves the entry's API key from its api_key_env.

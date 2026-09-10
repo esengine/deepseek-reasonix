@@ -139,6 +139,34 @@ Reasonix 不会追加或改写路径。已有 TOML 配置不会被重新解释�
 模型发现需要单独地址时可设置 `models_url`；否则 Reasonix 会继续从 `base_url`
 推测模型发现地址。
 
+## `cachecontext`（按项目的用户 ID）
+
+`cachecontext` 是顶层标量（不是 provider 字段），会作为 DeepSeek `user_id` 发送给 provider ——
+Anthropic 兼容端点为 `metadata.user_id`，OpenAI 兼容端点为 `user`。DeepSeek 用它做 KV 缓存隔离和
+滥用追踪，因此应当**按项目**取值，而不是按 provider。
+
+因为它在 provider 配置之外，同一个共享 provider 条目可用于所有项目；每个项目在其项目本地配置里各自设置值：
+
+```toml
+cachecontext = "my-project"
+```
+
+该值应匹配 `^[a-zA-Z0-9_-]+$` 且不超过 512 个字符；不匹配时 DeepSeek 会返回 HTTP 400。
+
+若 `cachecontext` 留空，Reasonix 会从 `<unix-user>:<repo-path>`（例如 `alice:/home/alice/my-project`）
+推导自动值，并按同样的 `^[a-zA-Z0-9_-]+$` 规则清洗 —— 因此仍会发送一个 id。超长路径保留
+`<user>-` 前缀与路径尾部，并对超出的中间部分做哈希，使值始终不超过 512 个字符。该自动值不会写入任何
+配置文件。
+
+### `logname` / `user`（自动默认值的用户名）
+
+自动默认值使用的用户名按以下优先级解析：仓库本地 `logname`、用户全局 `logname`、`user`（`logname`
+的旧别名）、`$LOGNAME` 环境变量、系统账户。若 `logname` 与 `user` 同时设置，`logname` 生效并记录
+一条加载警告。
+
+桌面端在项目标签页的 **项目** 设置区中暴露此字段，并保存到工作区的项目本地配置。全局设置
+中有意不提供它 —— 全局值会让所有项目共用同一个 ID，破坏 KV 缓存隔离。
+
 ## 全局 `.env`
 
 `<Reasonix home>/.env` 是 Reasonix 保存的 provider API key 的唯一运行时来源。

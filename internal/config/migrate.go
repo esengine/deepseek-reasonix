@@ -267,7 +267,7 @@ func migrateMCPToUserConfig(projectRoots []string) (*MCPGlobalMigrationResult, e
 		addEntries(loadPluginEntriesFromTOML(path))
 	}
 	for _, root := range normalizedMCPMigrationRoots(projectRoots) {
-		addEntries(loadPluginEntriesFromTOML(filepath.Join(root, "reasonix.toml")))
+		addEntries(append(loadPluginEntriesFromTOML(filepath.Join(root, projectConfigFile)), loadPluginEntriesFromTOML(filepath.Join(root, projectConfigLocal))...))
 		if entries, err := loadMCPJSON(filepath.Join(root, mcpJSONFile)); err == nil {
 			addEntries(entries)
 		}

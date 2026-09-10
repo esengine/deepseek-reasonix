@@ -50,7 +50,7 @@ func IsUserConfigPath(path string) bool {
 func (c *Config) Save() error {
 	path := SourcePath()
 	if path == "" {
-		path = "reasonix.toml"
+		path = projectConfigLocal
 	}
 	return c.SaveTo(path)
 }
@@ -60,10 +60,7 @@ func (c *Config) Save() error {
 // are edited from their own TOML only, never from a runtime user+project merge.
 func (c *Config) SaveForRoot(root string) error {
 	root = resolveRoot(root)
-	projectTOML := "reasonix.toml"
-	if root != "." {
-		projectTOML = filepath.Join(root, "reasonix.toml")
-	}
+	projectTOML := ProjectConfigPath(root)
 	if _, err := os.Stat(projectTOML); err == nil {
 		projectCfg := LoadForEditWithoutCredentials(projectTOML)
 		return projectCfg.SaveTo(projectTOML)

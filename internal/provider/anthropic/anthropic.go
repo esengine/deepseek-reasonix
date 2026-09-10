@@ -133,6 +133,8 @@ func New(cfg provider.Config) (provider.Provider, error) {
 	clientWebSearch, _ := cfg.Extra["client_web_search"].(bool)
 	headers, _ := cfg.Extra["headers"].(map[string]string)
 	authHeader, _ := cfg.Extra["auth_header"].(bool)
+	userID, _ := cfg.Extra["user_id"].(string)
+	sessionID, _ := cfg.Extra["session_id"].(string)
 	maxOutputTokens, _ := cfg.Extra["max_output_tokens"].(int)
 	if maxOutputTokens <= 0 {
 		// Messages requires max_tokens. 0 = automatic; negative also falls back
@@ -175,6 +177,8 @@ func New(cfg provider.Config) (provider.Provider, error) {
 		search:           provider.SearchPolicy{NativeEnabled: webSearch, ClientEnabled: clientWebSearch},
 		headers:          cleanCustomHeaders(headers),
 		authHeader:       authHeader,
+		metadata:         userMetadata(userID),
+		sessionID:        sessionID,
 		defaultMaxTokens: maxOutputTokens,
 		http:             httpClient, // no overall timeout; lifecycle is ctx-driven
 		idleTimeout:      defaultStreamIdleTimeout,
@@ -214,7 +218,9 @@ type client struct {
 	mimo             bool // true for MiMo — upgrades legacy tuple schemas to Draft 2020-12
 	search           provider.SearchPolicy
 	headers          map[string]string
-	authHeader       bool // send Authorization: Bearer instead of Anthropic's x-api-key header
+	authHeader       bool            // send Authorization: Bearer instead of Anthropic's x-api-key header
+	metadata         *metadataConfig // workspace user attribution id; sent as metadata.user_id
+	sessionID        string          // derived workspace session id; sent as top-level `session_id` (OpenRouter convention)
 	defaultMaxTokens int
 	http             *http.Client
 	idleTimeout      time.Duration // SSE stall watchdog window; defaultStreamIdleTimeout unless a test overrides
@@ -394,10 +400,14 @@ func (c *client) buildRequest(ctx context.Context, req provider.Request) anthReq
 		Messages:  msgs,
 		Tools:     tools,
 		Stream:    true,
+		SessionID: c.sessionID,
 	}
 	effort := c.effort
 	if req.EffortOverride != "" {
 		effort = req.EffortOverride
+	}
+	if c.metadata != nil {
+		r.Metadata = c.metadata
 	}
 	// Extended thinking is provider-specific. DeepSeek defaults to enabled and
 	// accepts output_config.effort alongside its binary toggle. Anthropic proper
@@ -689,7 +699,22 @@ type anthRequest struct {
 	Temperature  *float64        `json:"temperature,omitempty"`
 	Thinking     *thinkingConfig `json:"thinking,omitempty"`
 	OutputConfig *outputConfig   `json:"output_config,omitempty"`
+	Metadata     *metadataConfig `json:"metadata,omitempty"`
 	Stream       bool            `json:"stream"`
+	SessionID    string          `json:"session_id,omitempty"`
+}
+
+type metadataConfig struct {
+	UserID string `json:"user_id"`
+}
+
+// userMetadata wraps a non-empty attribution id into the Anthropic metadata
+// shape; empty returns nil so no spurious metadata block is sent.
+func userMetadata(userID string) *metadataConfig {
+	if strings.TrimSpace(userID) == "" {
+		return nil
+	}
+	return &metadataConfig{UserID: strings.TrimSpace(userID)}
 }
 
 type thinkingConfig struct {

@@ -174,6 +174,43 @@ If a gateway requires vendor-specific top-level request body fields, set
 are merged into the OpenAI-compatible chat JSON request body without allowing
 core fields such as `model`, `messages`, `tools`, or `stream` to be overridden.
 
+## `cachecontext` (per-project user id)
+
+`cachecontext` is a top-level scalar (not a provider field) that is sent to
+providers as the DeepSeek `user_id` — on the Anthropic-compatible endpoint as
+`metadata.user_id`, on the OpenAI-compatible endpoint as `user`. DeepSeek uses it
+for KV-cache isolation and abuse tracking, so it is meaningful to differ **per
+project** rather than per provider.
+
+Because it lives outside the provider config, one shared provider entry works
+across all projects; each project sets its own value in the project-local config:
+
+```toml
+cachecontext = "my-project"
+```
+
+The value should match `^[a-zA-Z0-9_-]+$` and be at most 512 characters; a
+mismatch returns an HTTP 400 from DeepSeek.
+
+If `cachecontext` is left unset, Reasonix derives an auto value from
+`<unix-user>:<repo-path>` (e.g. `alice:/home/alice/my-project`), sanitized to the
+same `^[a-zA-Z0-9_-]+$` rule — so an id is still sent. Over-long paths keep the
+`<user>-` prefix and the path tail, hashing the overflowing middle so the value
+never exceeds 512 characters. The auto value is never written to a config file.
+
+### `logname` / `user` (auto-default username)
+
+The username used in that auto default resolves in this priority order: a
+repo-local `logname`, then a user-global `logname`, then `user` (an older alias
+for `logname`), then the `$LOGNAME` environment variable, then the system
+account. If both `logname` and `user` are set, `logname` prevails and a load
+warning is recorded.
+
+In the desktop app, the **Project** settings section on the project tab exposes
+this field and saves it to the workspace's project-local config. It is intentionally
+absent from the global settings — a global value would leak the same id across
+every project, defeating KV-cache isolation.
+
 ## Global `.env`
 
 `<Reasonix home>/.env` is the single runtime source for provider API keys saved
