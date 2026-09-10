@@ -155,6 +155,12 @@ profile-level allowlist, not a way to bypass permissions. `read-only: true`
 forces the read-only tool registry (writer tools stripped); omitted/`false`
 keeps the legacy writable default.
 
+Skills discovered under a `.claude` convention directory get Claude Code tool
+names in `allowed-tools` (`Read`, `Edit`, `AskUserQuestion`, ...) translated to
+Reasonix tool names, and Claude model aliases (`sonnet`, `opus`, `haiku`,
+`inherit`) fall back to the session model — the same mapping plugin-provided
+Claude agents already receive.
+
 You may hand-author richer `runAs: subagent` Skills, including custom Skill
 paths and extra frontmatter. They can be listed and invoked, but the profile
 editors deliberately refuse to edit or delete:

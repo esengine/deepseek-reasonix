@@ -137,6 +137,11 @@ allowed-tools: [read_file, grep, bash]
 调用。`allowed-tools` 是 Profile 级工具白名单，不能绕过权限系统。`read-only: true`
 强制使用只读工具 registry（剥离写入工具）；省略/`false` 保持旧版默认可写。
 
+在 `.claude` 约定目录下发现的 Skill，其 `allowed-tools` 中的 Claude Code 工具名
+（`Read`、`Edit`、`AskUserQuestion` 等）会被翻译为 Reasonix 工具名；Claude 模型别名
+（`sonnet`、`opus`、`haiku`、`inherit`）回退到会话模型 —— 与插件提供的 Claude Agent
+所获得的映射一致。
+
 也可以手写更丰富的 `runAs: subagent` Skill，例如使用自定义 Skill path 或额外 frontmatter。
 这些 Profile 可以被列出和调用，但 Profile 编辑器会拒绝编辑或删除以下内容：
 

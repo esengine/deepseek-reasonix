@@ -444,6 +444,7 @@ type discoveryRoot struct {
 	requireFlatMarker bool
 	plugins           []string
 	forceSubagent     bool
+	claudeCompat      bool
 }
 
 // roots returns the discovery directories, highest priority first: the
@@ -458,18 +459,19 @@ func (s *Store) roots() []discoveryRoot {
 		dir               string
 		scope             Scope
 		requireFlatMarker bool
+		claudeCompat      bool
 	}
 	var dirs []de
 	if s.projectRoot != "" {
 		for _, c := range config.ConventionDirs {
-			dirs = append(dirs, de{filepath.Join(s.projectRoot, c, SkillsDirname), ScopeProject, c == ".claude"})
+			dirs = append(dirs, de{filepath.Join(s.projectRoot, c, SkillsDirname), ScopeProject, c == ".claude", c == ".claude"})
 		}
 	}
 	for _, d := range s.customPaths {
-		dirs = append(dirs, de{d, ScopeCustom, false})
+		dirs = append(dirs, de{d, ScopeCustom, false, false})
 	}
 	if s.reasonixHomeDir != "" {
-		dirs = append(dirs, de{filepath.Join(s.reasonixHomeDir, SkillsDirname), ScopeGlobal, false})
+		dirs = append(dirs, de{filepath.Join(s.reasonixHomeDir, SkillsDirname), ScopeGlobal, false, false})
 	}
 	if config.IsolatedHomeDir() == "" {
 		for _, c := range config.ConventionDirs {
@@ -477,7 +479,7 @@ func (s *Store) roots() []discoveryRoot {
 			if s.reasonixHomeDir != "" && config.CanonicalSkillPath(filepath.Dir(dir)) == config.CanonicalSkillPath(s.reasonixHomeDir) {
 				continue
 			}
-			dirs = append(dirs, de{dir, ScopeGlobal, c == ".claude"})
+			dirs = append(dirs, de{dir, ScopeGlobal, c == ".claude", c == ".claude"})
 		}
 	}
 	out := make([]discoveryRoot, 0, len(dirs))
@@ -491,6 +493,7 @@ func (s *Store) roots() []discoveryRoot {
 			requireFlatMarker: d.requireFlatMarker,
 			plugins:           append([]string(nil), s.pluginPaths[key]...),
 			forceSubagent:     len(s.pluginAgentPaths[key]) > 0,
+			claudeCompat:      d.claudeCompat,
 		})
 	}
 	return out
@@ -734,6 +737,10 @@ func (s *Store) discoverRoot(r discoveryRoot) []Skill {
 		for i := range out {
 			out[i].RunAs = RunSubagent
 			out[i].Invocation = "manual"
+		}
+	}
+	if r.forceSubagent || r.claudeCompat {
+		for i := range out {
 			out[i].AllowedTools = mapClaudeAgentTools(out[i].AllowedTools)
 			if isClaudeModelAlias(out[i].Model) {
 				out[i].Model = ""
@@ -908,36 +915,6 @@ func firstNonEmptySkillValue(values ...string) string {
 		}
 	}
 	return ""
-}
-
-func isClaudeModelAlias(model string) bool {
-	switch strings.ToLower(strings.TrimSpace(model)) {
-	case "sonnet", "opus", "haiku", "inherit":
-		return true
-	default:
-		return false
-	}
-}
-
-func mapClaudeAgentTools(in []string) []string {
-	mapping := map[string]string{
-		"read": "read_file", "write": "write_file", "edit": "edit_file",
-		"bash": "bash", "grep": "grep", "glob": "glob", "ls": "ls",
-		"webfetch": "web_fetch", "websearch": "web_search",
-	}
-	out := make([]string, 0, len(in))
-	seen := map[string]bool{}
-	for _, name := range in {
-		mapped := strings.TrimSpace(name)
-		if replacement := mapping[strings.ToLower(mapped)]; replacement != "" {
-			mapped = replacement
-		}
-		if mapped != "" && !seen[mapped] {
-			seen[mapped] = true
-			out = append(out, mapped)
-		}
-	}
-	return out
 }
 
 const (
