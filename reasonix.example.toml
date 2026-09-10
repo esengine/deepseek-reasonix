@@ -4,7 +4,12 @@
 # Provider entries name secrets via api_key_env; saved key values live in
 # Reasonix's global <Reasonix home>/.env. Never put API key values here.
 
-default_model = "deepseek"   # a provider name (→ its default model) or "provider/model"
+default_model = "deepseek"   # a provider name (→ its default model) or "provider/model".
+                            # If this provider is keyless in the current environment, the CLI/boot
+                            # path falls through to the first configured chat model (#7002); the
+                            # desktop NewSession path applies [desktop].provider_access first
+                            # before falling back (#6999). Explicit --model or the in-app model
+                            # switcher never get silently rerouted.
 # language      = "zh"   # ui language; empty = auto-detect from $LANG / $REASONIX_LANG
 
 [ui]
@@ -21,6 +26,17 @@ layout_style = "workbench"   # workbench|creation; legacy classic migrates to wo
 # theme = "auto"   # desktop only: auto|dark|light
 # terminal_theme = "auto"   # integrated terminal: auto|dark|light; auto follows the desktop app
 # theme_style = "graphite"   # graphite|aurora|slate|carbon|nocturne|amber and legacy aliases
+# provider_access = ["deepseek"]   # desktop-only allowlist of providers shown in Settings >
+                                # Model > Access and the in-app model switcher. Three states:
+                                #   omitted (nil)  — every configured provider is shown
+                                #                    (legacy "all providers" behavior).
+                                #   explicit list  — only the named providers are shown; new
+                                #                    sessions that boot onto a default_model
+                                #                    outside this list will silently fall back
+                                #                    to the first listed, configured chat model.
+                                #   explicit []    — no providers shown; new sessions cannot
+                                #                    start and the app prompts onboarding.
+                                # CLI startup ignores this field; it is desktop-only.
 
 [billing]
 # display_currency = "auto"   # auto|CNY|USD — display only; never rewrites provider list prices

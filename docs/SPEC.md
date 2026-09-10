@@ -107,6 +107,40 @@ type Config struct {
 - Streaming tool-call deltas are accumulated by index inside the provider; only
   complete `ToolCall`s are emitted.
 
+#### 3.1.1 Desktop model access and keyless default fallback
+
+`[desktop].provider_access` is a desktop-only allowlist of provider names shown
+in **Settings → Model → Access** and the in-app model switcher. It has three
+distinct states that the UI must respect:
+
+| State | Effect |
+| --- | --- |
+| **Omitted (nil)** | Desktop shows every configured provider. Legacy "all providers" behavior. |
+| **Explicit non-empty list** | Desktop only shows the named providers. New sessions that would boot onto a `default_model` outside this list silently fall back to the first listed, configured, key-bearing chat model. |
+| **Explicit `[]`** | Desktop shows no providers; new sessions cannot start and `NeedsOnboarding()` returns true so the app prompts the user to add one. |
+
+A keyless `default_model` is therefore acceptable as long as *some* configured
+chat provider has a key, even if it is not your first choice:
+
+- **CLI / shared `boot.Build` path** — `Config.ResolveNewSessionChatModel`
+  (added in #7002) is the shared chat-only fallback policy. TTS, embedding, and
+  other non-chat models are excluded from the candidate list.
+- **Desktop new-session path** — `Config.ResolveDesktopNewSessionModel`
+  (added in #6999) reuses the same policy and additionally filters by
+  `[desktop].provider_access`. If a keyless default is preserved (no candidate
+  has a key), the existing missing-key recovery UI still surfaces so the user
+  knows what to configure.
+
+Explicit user model choices are **never** silently rerouted. A keyless or
+unknown ref on the `--model` flag, the in-app model switcher for the *current*
+session, `c.Agent.PlannerModel`, or `c.Agent.SubagentModel` fails loud (CLI) or
+shows the missing-key recovery prompt (desktop interactive mode). Only the
+*implicit* `default_model` is eligible for the silent fallback above.
+
+`Config.ResolveModelWithFallback` is preserved unchanged for callers that
+already supply a resolvable explicit ref and want both the resolved form and a
+flag indicating whether the resolver had to fall back from an absent env var.
+
 ### 3.2 Tool + registry (`internal/tool`)
 
 ```go

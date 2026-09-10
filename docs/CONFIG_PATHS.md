@@ -116,6 +116,14 @@ name    = "example"
 command = "example-mcp-server"
 ```
 
+`[desktop].provider_access` and `default_model` interact at desktop startup
+(see [SPEC §3.1.1](SPEC.md#311-desktop-model-access-and-keyless-default-fallback)
+for the full table). If your `default_model` resolves to a provider that is
+not in `provider_access`, the new session silently boots onto the first listed,
+configured, key-bearing chat model. If you see an unexpected model substitution
+at launch, add the default's provider name to the list, or remove the field to
+allow every configured provider.
+
 Do not put API key values in `config.toml`. This file is regular configuration:
 it is safe to inspect, edit, migrate, and include in diagnostics after standard
 redaction. Secrets belong in the global `.env` below.

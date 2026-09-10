@@ -97,6 +97,13 @@ name    = "example"
 command = "example-mcp-server"
 ```
 
+`[desktop].provider_access` 与 `default_model` 在桌面端启动时会联动（完整
+说明见 [SPEC §3.1.1](SPEC.zh-CN.md#311-桌面端模型访问与无密钥默认模型回退)）。
+如果 `default_model` 解析到的 provider 不在 `provider_access` 列表里，新
+会话会静默回退到列表内第一个已配置且有 key 的 chat model。如果启动时看到
+非预期的模型替换，把 default 使用的 provider 加进列表里，或者把整个字段
+删掉让所有已配置的 provider 都可用。
+
 不要把 API key 的真实值写进 `config.toml`。这个文件是普通配置：可以查看、编辑、
 迁移，也可以在常规脱敏后用于诊断。密钥值属于下面的全局 `.env`。
 

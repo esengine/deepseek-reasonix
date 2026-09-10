@@ -76,6 +76,38 @@ func New(kind string, cfg Config) (Provider, error)
 - `max_output_tokens` 是独立的本轮输出上限，不由客户端 reasoning 字节上限换算，也不参与 `compact_ratio`。`0` 是 Provider 自动值（官方 DeepSeek 384K / OpenCode 元数据），不再表示跳过本地检查；空间充足时官方 DeepSeek 仍省略字段，临界时裁剪。正数为用户显式控费上限。负数为明确省略；安全不足时压缩。`budget_tokens` 在官方 Anthropic 兼容层会被忽略。混合网关可用 `model_overrides.<model>.max_output_tokens` 覆盖单个模型。
 - streaming tool-call delta 在 provider 内按 index 聚合，只向上层发出完整 `ToolCall`。
 
+#### 3.1.1 桌面端模型访问与无密钥默认模型回退
+
+`[desktop].provider_access` 是仅作用于桌面端的 provider 名白名单，控制
+**设置 → 模型 → 访问** 与应用内模型选择器中展示哪些 provider。它有三种
+互不相同的取值，UI 必须区分对待：
+
+| 取值 | 行为 |
+| --- | --- |
+| **省略（nil）** | 桌面端展示所有已配置的 provider，保留旧版"全开放"行为。 |
+| **显式非空列表** | 桌面端只展示列表内 provider；新会话若默认会落到列表外的 `default_model`，会静默回退到列表内第一个已配置且已配 key 的 chat model。 |
+| **显式 `[]`** | 桌面端不展示任何 provider；新会话无法启动，`NeedsOnboarding()` 返回 true 提示用户先添加一个。 |
+
+因此，只要 *任何一个* 已配置的 chat provider 持有 key，`default_model` 指向
+无 key provider 也是可以接受的——系统会按以下规则回退：
+
+- **CLI / 共享 `boot.Build` 路径** —— `Config.ResolveNewSessionChatModel`（#7002
+  新增）是 chat-only 的共享回退策略。TTS、embedding 等非 chat 模型不会作为
+  回退候选。
+- **桌面端新会话路径** —— `Config.ResolveDesktopNewSessionModel`（#6999 新增）
+  复用同一策略，但额外按 `[desktop].provider_access` 做白名单过滤。若全部
+  候选都没 key，仍会保留一个有效的 default 让现有的 missing-key 恢复 UI
+  告诉用户该配什么。
+
+**显式选定的 model 永远不会被静默重路由**。`--model`、当前会话的模型选择
+器、`c.Agent.PlannerModel`、`c.Agent.SubagentModel` 在 keyless 或 unknown
+时都会显式失败（CLI）或弹出 missing-key 恢复提示（桌面端交互模式）。只有
+*隐式* `default_model` 才会走上述静默回退。
+
+`Config.ResolveModelWithFallback` 保持原有语义不变，供已经传入可解析的
+显式 ref、并希望同时拿到 resolved 形式和"是否因 env 缺失而回退"标记的调用
+方继续使用。
+
 ### 3.2 Tool 与 registry（`internal/tool`）
 
 ```go
