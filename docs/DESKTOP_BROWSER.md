@@ -44,6 +44,32 @@ no form state, credentials or replayable submissions are persisted. Tab
 metadata and the operation log are new versioned files under the desktop
 state directory (`browser/tabs-v1.json`, `browser/operations-v1.json`).
 
+## Browser control settings
+
+The Settings Centre page "Browser control" owns the switches below, all stored
+in `browser-control.json` inside the shell's userData profile (`desktop-shell/`).
+
+- **Built-in browser control** (`controlEnabled`, default on). The shell pushes
+  it to Go with `desktop/browserControl`, and Go reads it when it builds a
+  session: a new session registers no browser tool at all, while a running
+  session keeps the tool set it started with.
+- **Ignore certificate errors** (`ignoreCertificateErrors`, default off).
+  Relaxes `setCertificateVerifyProc` for guest sessions only. It is applied when
+  the guest-view factory prepares a partition and re-applied to every live guest
+  session when the switch changes, so no restart is needed.
+- **Clear built-in browser cache** clears the HTTP cache plus Cache Storage,
+  Service Workers and the shader cache of `persist:browser`, keeping cookies and
+  local site data.
+- **Clear all browser data** additionally drops every storage type, which signs
+  every site in the built-in browser out. In-memory `temp:<id>` partitions are
+  unaffected.
+- **Import Chrome sign-in state** reads the newest Chrome profile's `Cookies`
+  database, decrypts each value (macOS: the login keychain's `Chrome Safe
+  Storage` secret; Linux: the well-known `peanuts` password; Windows: the DPAPI
+  master key from `Local State`) and writes it into `persist:browser`. Expired
+  cookies, App-Bound (`v20`) values and rows that fail to decrypt are counted as
+  skipped. Passwords are never read.
+
 ## Agent capabilities
 
 Tools are registered through the existing capability registry as one

@@ -3,11 +3,13 @@ import { DesktopEventStream, MissedEventSubscriptions } from "../shared/eventStr
 import {
   hostOS,
   IPC,
+  type BrowserControlState,
   type BrowserDownloadView,
   type BrowserLayoutRect,
   type BrowserNavigateTarget,
   type BrowserOpenOptions,
   type BrowserTabView,
+  type ChromeImportOutcome,
   type ContractInfo,
   type IpcResult,
   type ServiceState,
@@ -208,6 +210,15 @@ contextBridge.exposeInMainWorld("reasonixDesktop", {
     graphics: {
       get: () => call(IPC.graphicsGet) as Promise<GraphicsSettingsState>,
       setHardwareAcceleration: (enabled: boolean) => call(IPC.graphicsSet, enabled) as Promise<GraphicsSettingsState>,
+    },
+    browserControl: {
+      get: () => call(IPC.browserControlGet) as Promise<BrowserControlState | null>,
+      setEnabled: (enabled: boolean) => call(IPC.browserControlSetEnabled, enabled) as Promise<BrowserControlState>,
+      setIgnoreCertificateErrors: (enabled: boolean) =>
+        call(IPC.browserControlSetIgnoreCertificateErrors, enabled) as Promise<BrowserControlState>,
+      clearCache: () => call(IPC.browserControlClearCache).then(() => undefined),
+      clearAllData: () => call(IPC.browserControlClearAll).then(() => undefined),
+      importChromeLogin: () => call(IPC.browserControlImportChrome) as Promise<ChromeImportOutcome>,
     },
     getPathForFile: (file: File) => webUtils.getPathForFile(file),
     onServiceState,

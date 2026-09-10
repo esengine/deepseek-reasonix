@@ -168,7 +168,12 @@ try {
         await page.setViewportSize({ width: 1600, height: 1100 });
         const search = page.getByRole("textbox", { name: "Search settings", exact: true });
         const searchBefore = await search.boundingBox();
-        await page.locator(".settings-center__navitem").last().scrollIntoViewIfNeeded();
+        const navItems = page.locator(".settings-center__navitem");
+        // Derived, not a literal: the contract is "clearing search restores
+        // every item", so the page owns the total and a new settings page does
+        // not have to edit this benchmark.
+        const navItemCount = await navItems.count();
+        await navItems.last().scrollIntoViewIfNeeded();
         await settle(page);
         const scrolled = await page.evaluate(geometry);
         assert.ok(scrolled.navigation.list.top >= scrolled.navigation.search.bottom, "scrolled navigation stays below search");
@@ -177,7 +182,7 @@ try {
         await search.fill("no-such-setting-regression");
         await page.locator(".settings-center__navempty").waitFor();
         await page.getByRole("button", { name: "Clear settings search", exact: true }).click();
-        assert.equal(await page.locator(".settings-center__navitem").count(), 20, "clearing search restores every navigation item");
+        assert.equal(await navItems.count(), navItemCount, "clearing search restores every navigation item");
         const picker = page.getByRole("button", { name: "Default model", exact: true });
         await picker.click();
         await page.getByRole("listbox", { name: "Default model", exact: true }).waitFor();

@@ -26,6 +26,34 @@ export interface GraphicsSettingsState {
   writable: boolean; warning: "invalid-config" | "unreadable-config" | "unsupported-version" | null;
 }
 
+export interface BrowserControlState {
+  controlEnabled: boolean;
+  ignoreCertificateErrors: boolean;
+  writable: boolean;
+  warning: "invalid-config" | "unreadable-config" | "unsupported-version" | null;
+}
+
+export type ChromeImportFailure =
+  | "chrome-missing"
+  | "profile-not-found"
+  | "cookies-unreadable"
+  | "safe-storage-denied"
+  | "safe-storage-unavailable"
+  | "unsupported-platform";
+
+export type ChromeImportOutcome =
+  | { ok: true; profile: string; cookies: number; skipped: number }
+  | { ok: false; reason: ChromeImportFailure };
+
+export interface BrowserControlApi {
+  get(): Promise<BrowserControlState | null>;
+  setEnabled(enabled: boolean): Promise<BrowserControlState>;
+  setIgnoreCertificateErrors(enabled: boolean): Promise<BrowserControlState>;
+  clearCache(): Promise<void>;
+  clearAllData(): Promise<void>;
+  importChromeLogin(): Promise<ChromeImportOutcome>;
+}
+
 // Mirrors docs/DESKTOP_HOST_PROTOCOL.md "Renderer preload API".
 export interface ReasonixDesktopHost {
   readonly kind: "electron";
@@ -49,6 +77,7 @@ export interface ReasonixDesktopHost {
       resetAppZoom(): Promise<number>;
     };
     graphics: { get(): Promise<GraphicsSettingsState>; setHardwareAcceleration(enabled: boolean): Promise<GraphicsSettingsState> };
+    browserControl: BrowserControlApi;
     getPathForFile(file: File): string;
     onServiceState(cb: (state: ServiceState) => void): () => void;
   };
@@ -76,6 +105,7 @@ export interface DesktopHost {
     setAppZoom(factor: number): Promise<number>;
     resetAppZoom(): Promise<number>;
     graphics: { get(): Promise<GraphicsSettingsState>; setHardwareAcceleration(enabled: boolean): Promise<GraphicsSettingsState> };
+    browserControl: BrowserControlApi;
     onFilesDropped(cb: (paths: string[]) => void): () => void;
     getPathForFile?(file: File): string;
     onServiceState(cb: (state: ServiceState) => void): () => void;
@@ -92,6 +122,17 @@ function dataTransferLooksLikeFileDrag(dt: DataTransfer | null): boolean {
 
 const noop = () => {};
 const win = () => (typeof window === "undefined" ? undefined : window);
+
+// The bare browser has no shell, so the browser-control page degrades to its
+// "desktop only" notice instead of pretending the actions exist.
+const unavailableBrowserControl: BrowserControlApi = {
+  get: async () => null,
+  setEnabled: async () => { throw new Error("browser control settings unavailable"); },
+  setIgnoreCertificateErrors: async () => { throw new Error("browser control settings unavailable"); },
+  clearCache: async () => { throw new Error("browser control settings unavailable"); },
+  clearAllData: async () => { throw new Error("browser control settings unavailable"); },
+  importChromeLogin: async () => ({ ok: false, reason: "unsupported-platform" }),
+};
 
 // The bare browser (Serve product, dev server, tests) has no shell: every
 // native call degrades to a no-op and there are no bound commands.
@@ -114,6 +155,7 @@ const serverHost: DesktopHost = {
     setAppZoom: async () => 1,
     resetAppZoom: async () => 1,
     graphics: { get: async () => ({ hardwareAcceleration: true, startupEnabled: true, override: "none", restartRequired: false, writable: false, warning: null }), setHardwareAcceleration: async () => { throw new Error("graphics settings unavailable"); } },
+    browserControl: unavailableBrowserControl,
   },
 };
 
@@ -171,6 +213,7 @@ const electronHostFrom = (host: ReasonixDesktopHost): DesktopHost => {
       setAppZoom: (factor) => host.native.window.setAppZoom(factor),
     resetAppZoom: () => host.native.window.resetAppZoom(),
       graphics: host.native.graphics,
+      browserControl: host.native.browserControl,
       onFilesDropped: (cb) => {
         installElectronDropHandlers();
         dropListeners.add(cb);

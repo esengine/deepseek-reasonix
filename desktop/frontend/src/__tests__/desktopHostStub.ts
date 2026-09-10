@@ -5,7 +5,7 @@
 // immediately (mirroring how the retired window.go seam behaved).
 import type { AppBindings } from "../lib/bridge";
 import type { DesktopBrowserHost } from "../lib/browserHost";
-import type { ReasonixDesktopHost } from "../lib/desktopHost";
+import type { BrowserControlApi, BrowserControlState, ChromeImportOutcome, ReasonixDesktopHost } from "../lib/desktopHost";
 
 export interface DesktopHostStubOptions {
   /** Maps a dropped File to its native path, mirroring the preload. */
@@ -17,6 +17,47 @@ export interface DesktopHostStubOptions {
   clipboardReadText?: string;
   /** Records native openExternal calls. */
   externalOpens?: string[];
+  /** State the browser-control page starts from. */
+  browserControl?: BrowserControlState;
+  /** Records browser-control calls in order, e.g. "setEnabled:false". */
+  browserControlCalls?: string[];
+  /** Outcome of the Chrome sign-in-state import. */
+  chromeImportOutcome?: ChromeImportOutcome;
+}
+
+function browserControlStub(options: DesktopHostStubOptions): BrowserControlApi {
+  let state: BrowserControlState = options.browserControl ?? {
+    controlEnabled: true,
+    ignoreCertificateErrors: false,
+    writable: true,
+    warning: null,
+  };
+  const record = (call: string) => options.browserControlCalls?.push(call);
+  return {
+    get: () => Promise.resolve(state),
+    setEnabled: (enabled) => {
+      record(`setEnabled:${enabled}`);
+      state = { ...state, controlEnabled: enabled };
+      return Promise.resolve(state);
+    },
+    setIgnoreCertificateErrors: (enabled) => {
+      record(`setIgnoreCertificateErrors:${enabled}`);
+      state = { ...state, ignoreCertificateErrors: enabled };
+      return Promise.resolve(state);
+    },
+    clearCache: () => {
+      record("clearCache");
+      return Promise.resolve();
+    },
+    clearAllData: () => {
+      record("clearAllData");
+      return Promise.resolve();
+    },
+    importChromeLogin: () => {
+      record("importChromeLogin");
+      return Promise.resolve(options.chromeImportOutcome ?? { ok: true, profile: "Default", cookies: 12, skipped: 0 });
+    },
+  };
 }
 
 export interface DesktopHostStub {
@@ -98,6 +139,7 @@ export function installDesktopHostStub(commands: object, options: DesktopHostStu
         setHardwareAcceleration: async (enabled: boolean) => ({ hardwareAcceleration: enabled, startupEnabled: true, override: "none" as const, restartRequired: enabled !== true, writable: true, warning: null }),
       },
       getPathForFile: options.getPathForFile ?? (() => ""),
+      browserControl: browserControlStub(options),
       onServiceState: () => () => {},
     },
     browser: undefined as unknown as DesktopBrowserHost,

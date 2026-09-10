@@ -22,6 +22,7 @@ type Hooks struct {
 	BeforeClose      func(ctx context.Context, reason string) (prevent bool)
 	Shutdown         func(ctx context.Context) error
 	HostEvent        func(ctx context.Context, name string, payload json.RawMessage) error
+	BrowserControl   func(ctx context.Context, enabled bool) error
 }
 
 // ServerConfig assembles one service process's identity around its registry.
@@ -68,6 +69,7 @@ func NewServer(conn *rpcwire.Conn, cfg ServerConfig) *Server {
 	conn.Handle("desktop/beforeClose", s.gated(s.beforeClose))
 	conn.Handle("desktop/shutdown", s.gated(s.shutdown))
 	conn.Handle("desktop/hostEvent", s.gated(s.hostEvent))
+	conn.Handle("desktop/browserControl", s.gated(s.browserControl))
 	conn.Handle("desktop/invoke", s.gated(s.invoke))
 	return s
 }
@@ -209,6 +211,24 @@ func (s *Server) hostEvent(ctx context.Context, raw json.RawMessage) (any, error
 		return empty(nil)
 	}
 	return empty(s.cfg.Hooks.HostEvent(ctx, p.Name, p.Payload))
+}
+
+// browserControl carries the shell's capability switch for the built-in
+// browser; the shell owns the persisted value and pushes it on every change.
+func (s *Server) browserControl(ctx context.Context, raw json.RawMessage) (any, error) {
+	var p struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if err := decodeParams(raw, &p); err != nil {
+		return nil, err
+	}
+	if p.Enabled == nil {
+		return nil, &rpcwire.RPCError{Code: rpcwire.ErrInvalidParams, Message: "enabled is required"}
+	}
+	if s.cfg.Hooks.BrowserControl == nil {
+		return empty(nil)
+	}
+	return empty(s.cfg.Hooks.BrowserControl(ctx, *p.Enabled))
 }
 
 func (s *Server) invoke(ctx context.Context, raw json.RawMessage) (any, error) {

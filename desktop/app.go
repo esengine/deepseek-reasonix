@@ -414,6 +414,9 @@ type App struct {
 	browserExecMu    sync.Mutex
 	browserExecutors map[string]*hostBrowserExecutor
 	browserOps       *browserops.Ledger
+	// browserControl is the shell-pushed switch that decides whether new
+	// sessions may drive the built-in browser at all.
+	browserControl browserControl
 }
 
 type desktopShellRuntimeState struct {

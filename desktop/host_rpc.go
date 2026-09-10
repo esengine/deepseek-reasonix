@@ -207,6 +207,10 @@ func hostRPCHooks(ctx context.Context, app *App, bridge *hostShellBridge, resour
 		BeforeClose: func(_ context.Context, reason string) bool { return bridge.beforeClose(ctx, reason) },
 		Shutdown:    func(context.Context) error { app.shutdown(ctx); return nil },
 		HostEvent:   bridge.handleHostEvent,
+		BrowserControl: func(_ context.Context, enabled bool) error {
+			app.setBrowserControlEnabled(enabled)
+			return nil
+		},
 	}
 }
 

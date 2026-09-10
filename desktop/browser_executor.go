@@ -64,7 +64,7 @@ func (t hostBrowserTab) tab() browser.Tab {
 }
 
 func (a *App) browserExecutorForTab(tab *WorkspaceTab) browser.Executor {
-	if tab == nil || !a.hostMode() {
+	if tab == nil || !a.hostMode() || a.browserControl.off() {
 		return nil
 	}
 	a.browserExecMu.Lock()

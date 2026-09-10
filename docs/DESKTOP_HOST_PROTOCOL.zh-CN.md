@@ -73,6 +73,7 @@ Go 随后在 `domReady` 中通过 `host/window.*` 定位、最大化并显示。
 | `desktop/beforeClose` | `{"reason":"window"\|"quit"\|"tray"\|"updater"}` | `{"prevent":bool}` | `App.beforeClose` |
 | `desktop/shutdown` | `{}` | `{}` | `App.shutdown` |
 | `desktop/hostEvent` | `{"name":string,"payload":any}` | `{}` | 第二实例、托盘打开/退出、菜单动作 |
+| `desktop/browserControl` | `{"enabled":bool}` | `{}` | 内置浏览器开关，构建会话时读取 |
 
 顺序：`hello` → `start` → 窗口加载 → `domReady` →（每次渲染进程挂载后 `rendererAttached`）
 → … → `beforeClose` →（`shutdown` → 关闭 stdin → 退出）。无论是否调用过 `shutdown`，
@@ -215,6 +216,14 @@ interface ReasonixDesktopHost {
     };
     getPathForFile(file: File): string;          // 原生拖放路径
     onServiceState(cb: (state: ServiceState) => void): () => void;
+    browserControl: {                            // 内置浏览器的设置页
+      get(): Promise<BrowserControlState | null>;
+      setEnabled(enabled: boolean): Promise<BrowserControlState>;
+      setIgnoreCertificateErrors(enabled: boolean): Promise<BrowserControlState>;
+      clearCache(): Promise<void>;               // 保留 Cookie 与站点数据
+      clearAllData(): Promise<void>;             // Cookie、站点数据与缓存
+      importChromeLogin(): Promise<ChromeImportOutcome>;
+    };
   };
   browser: {                                       // 用户驱动的浏览器面板；Agent 调用经 Go
     list(): Promise<BrowserTabView[]>;
@@ -240,6 +249,13 @@ temporary, mode: "agent" | "human", epoch, zoom, error }`，`BrowserDownloadView
 
 `ServiceState` 为 `{ phase: "starting" | "ready" | "restarting" | "failed" | "exited"; generation: string; error?: string }`。
 业务组件只导入类型化 SDK，从不直接使用该对象；只有桥接适配层读取它。
+
+`BrowserControlState` 为 `{ controlEnabled, ignoreCertificateErrors, writable,
+warning: "invalid-config" | "unreadable-config" | "unsupported-version" | null }`，
+`ChromeImportOutcome` 为 `{ ok: true, profile, cookies, skipped }` 或
+`{ ok: false, reason }`，`reason` 取值 `chrome-missing`、`profile-not-found`、
+`cookies-unreadable`、`safe-storage-denied`、`safe-storage-unavailable`、
+`unsupported-platform`。
 
 ## 安全边界
 

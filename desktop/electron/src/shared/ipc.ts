@@ -19,6 +19,12 @@ export const IPC = {
   appZoomReset: "reasonix:native:app-zoom-reset",
   graphicsGet: "reasonix:native:graphics-get",
   graphicsSet: "reasonix:native:graphics-set",
+  browserControlGet: "reasonix:native:browser-control-get",
+  browserControlSetEnabled: "reasonix:native:browser-control-set-enabled",
+  browserControlSetIgnoreCertificateErrors: "reasonix:native:browser-control-set-ignore-certificate-errors",
+  browserControlClearCache: "reasonix:native:browser-control-clear-cache",
+  browserControlClearAll: "reasonix:native:browser-control-clear-all",
+  browserControlImportChrome: "reasonix:native:browser-control-import-chrome",
   browserList: "reasonix:browser:list",
   browserOpen: "reasonix:browser:open",
   browserClose: "reasonix:browser:close",
@@ -69,6 +75,27 @@ export interface WindowBounds {
 export type WindowTheme = "system" | "light" | "dark";
 
 export type HostOS = "darwin" | "windows" | "linux";
+
+export type BrowserControlWarning = "invalid-config" | "unreadable-config" | "unsupported-version";
+
+export interface BrowserControlState {
+  controlEnabled: boolean;
+  ignoreCertificateErrors: boolean;
+  writable: boolean;
+  warning: BrowserControlWarning | null;
+}
+
+export type ChromeImportFailure =
+  | "chrome-missing"
+  | "profile-not-found"
+  | "cookies-unreadable"
+  | "safe-storage-denied"
+  | "safe-storage-unavailable"
+  | "unsupported-platform";
+
+export type ChromeImportOutcome =
+  | { ok: true; profile: string; cookies: number; skipped: number }
+  | { ok: false; reason: ChromeImportFailure };
 
 export function hostOS(platform: string): HostOS {
   if (platform === "darwin") return "darwin";

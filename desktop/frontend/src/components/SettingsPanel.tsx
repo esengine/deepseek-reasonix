@@ -108,6 +108,7 @@ const MemorySettingsPage = lazy(() => import("./MemoryPanel").then((module) => (
 const SubagentsSettingsPage = lazy(() => import("./SubagentsPanel").then((module) => ({ default: module.SubagentsSettingsPage })));
 const DiagnosticsSettingsPage = lazy(() => import("./DiagnosticsSettingsPage").then((module) => ({ default: module.DiagnosticsSettingsPage })));
 const StorageSettingsPage = lazy(() => import("./StorageSettingsPage").then((module) => ({ default: module.StorageSettingsPage })));
+const BrowserControlSettingsPage = lazy(() => import("./BrowserControlSettingsPage").then((module) => ({ default: module.BrowserControlSettingsPage })));
 const UsageStatsPanel = lazy(() => import("./UsageStatsPanel").then((module) => ({ default: module.UsageStatsPanel })));
 const QRCodeSVG = lazy(() => import("qrcode.react").then((module) => ({ default: module.QRCodeSVG })));
 
@@ -500,6 +501,7 @@ export function SettingsPanel({
                   </SettingsPageShell>
                 )}
                 {tab === "storage" && <SettingsPageShell key={tab} s={s} tab={tab} busy={false} apply={apply}><Suspense fallback={lazySettingsPageFallback}><StorageSettingsPage /></Suspense></SettingsPageShell>}
+                {tab === "browser" && <SettingsPageShell key={tab} s={s} tab={tab} busy={false} apply={apply}><Suspense fallback={lazySettingsPageFallback}><BrowserControlSettingsPage /></Suspense></SettingsPageShell>}
                 {tab === "updates" && s && (
                   <SettingsPageShell key={tab} s={s} tab={tab} busy={busy} apply={apply}>
                     <UpdatesSection
@@ -620,6 +622,7 @@ function settingsTabLabel(id: SettingsTab, t: ReturnType<typeof useT>): string {
       return t("settings.tab.sandbox");
     case "appearance": return t("settings.tab.appearance");
     case "storage": return t("settings.tab.storage");
+    case "browser": return t("settings.tab.browser");
     case "updates":
       return t("settings.tab.updates");
   }
@@ -662,6 +665,7 @@ function settingsTabMeta(id: SettingsTab, s: SettingsView, t: ReturnType<typeof 
       return sandboxModeLabel(s.sandbox.bash, t);
     case "appearance": return t("settings.appearanceMeta");
     case "storage": return t("settings.storageMeta");
+    case "browser": return t("settings.browserMeta");
     case "updates":
       return t("settings.updatesMeta");
   }

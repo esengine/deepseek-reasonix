@@ -84,6 +84,7 @@ the shell discards anything tagged with an old one.
 | `desktop/beforeClose` | `{"reason":"window"\|"quit"\|"tray"\|"updater"}` | `{"prevent":bool}` | `App.beforeClose` |
 | `desktop/shutdown` | `{}` | `{}` | `App.shutdown` |
 | `desktop/hostEvent` | `{"name":string,"payload":any}` | `{}` | second instance, tray open/quit, menu actions |
+| `desktop/browserControl` | `{"enabled":bool}` | `{}` | built-in browser switch, read when a session is built |
 
 Order: `hello` → `start` → window load → `domReady` → (`rendererAttached` after
 each renderer mount) → … → `beforeClose` → (`shutdown` → stdin close → exit).
@@ -251,6 +252,14 @@ interface ReasonixDesktopHost {
     };
     getPathForFile(file: File): string;          // native drop paths
     onServiceState(cb: (state: ServiceState) => void): () => void;
+    browserControl: {                            // settings page for the built-in browser
+      get(): Promise<BrowserControlState | null>;
+      setEnabled(enabled: boolean): Promise<BrowserControlState>;
+      setIgnoreCertificateErrors(enabled: boolean): Promise<BrowserControlState>;
+      clearCache(): Promise<void>;               // keeps cookies and site data
+      clearAllData(): Promise<void>;             // cookies, site data and cache
+      importChromeLogin(): Promise<ChromeImportOutcome>;
+    };
   };
   browser: {                                       // user-driven browser panel; agent calls go through Go
     list(): Promise<BrowserTabView[]>;
@@ -278,6 +287,13 @@ total }`. Website views live in `persist:browser` (shared logins) or
 `ServiceState` is `{ phase: "starting" | "ready" | "restarting" | "failed" | "exited"; generation: string; error?: string }`.
 Business components import the typed SDK, never this object; only the bridge
 adapter reads it.
+
+`BrowserControlState` is `{ controlEnabled, ignoreCertificateErrors, writable,
+warning: "invalid-config" | "unreadable-config" | "unsupported-version" | null }`
+and `ChromeImportOutcome` is either `{ ok: true, profile, cookies, skipped }` or
+`{ ok: false, reason }` with `reason` one of `chrome-missing`,
+`profile-not-found`, `cookies-unreadable`, `safe-storage-denied`,
+`safe-storage-unavailable`, `unsupported-platform`.
 
 ## Security boundaries
 

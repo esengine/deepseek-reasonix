@@ -504,7 +504,7 @@ func (a *App) resolveRemoteBrowserSession(hostID, sessionPath string) (browserSe
 // browserExecutorForRemoteTab returns the cached executor for one remote
 // tab's browser surface; a session rotation re-scopes the grant.
 func (a *App) browserExecutorForRemoteTab(tab *remoteTab, sessionPath string) browser.Executor {
-	if tab == nil || !a.hostMode() {
+	if tab == nil || !a.hostMode() || a.browserControl.off() {
 		return nil
 	}
 	key := "remote/" + tab.id

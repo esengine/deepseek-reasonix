@@ -6,6 +6,7 @@ import {
   Box,
   Cable,
   Database,
+  Globe,
   HardDrive,
   Keyboard,
   LockKeyhole,
@@ -28,7 +29,7 @@ import type { SettingsTab } from "../lib/types";
 
 export const SETTINGS_NAV_TABS: SettingsTab[] = [
   "general", "bots", "models", "providers", "model-stats", "mcp", "remote", "skills", "subagents", "plugins", "memory",
-  "hooks", "diagnostics", "shortcuts", "permissions", "sandbox", "network", "appearance", "storage", "updates",
+  "hooks", "diagnostics", "shortcuts", "permissions", "sandbox", "network", "browser", "appearance", "storage", "updates",
 ];
 
 const SETTINGS_TAB_GROUPS: { labelKey: DictKey; tabs: SettingsTab[] }[] = [
@@ -38,7 +39,7 @@ const SETTINGS_TAB_GROUPS: { labelKey: DictKey; tabs: SettingsTab[] }[] = [
   { labelKey: "settings.navGroup.capabilities", tabs: ["skills", "subagents", "plugins"] },
   { labelKey: "settings.navGroup.context", tabs: ["memory"] },
   { labelKey: "settings.navGroup.automation", tabs: ["hooks", "diagnostics"] },
-  { labelKey: "settings.navGroup.security", tabs: ["permissions", "sandbox", "network"] },
+  { labelKey: "settings.navGroup.security", tabs: ["permissions", "sandbox", "network", "browser"] },
   { labelKey: "settings.navGroup.application", tabs: ["appearance", "shortcuts", "storage", "updates"] },
 ];
 
@@ -148,6 +149,7 @@ function settingsTabIcon(id: SettingsTab): ReactNode {
     case "network": return <Network {...props} />;
     case "appearance": return <Palette {...props} />;
     case "storage": return <HardDrive {...props} />;
+    case "browser": return <Globe {...props} />;
     case "updates": return <RefreshCw {...props} />;
   }
 }

@@ -15,6 +15,7 @@ import { errorText, type Logger } from "./log.js";
 import { bool, finite, record, str } from "./params.js";
 import { RpcError } from "./rpc.js";
 import type { GraphicsSettingsStore } from "./graphics.js";
+import type { BrowserControlApi } from "./browserControlHost.js";
 
 export interface RendererWindowApi {
   isTrustedSender(sender: IpcMainEvent["sender"], frame: IpcMainEvent["senderFrame"]): boolean;
@@ -54,6 +55,7 @@ export interface RendererIpcDeps {
   serviceState(): ServiceState;
   clipboard: { writeText(text: string): Promise<void> | void; readText(): Promise<string> | string };
   graphics?: GraphicsSettingsStore;
+  browserControl?: BrowserControlApi;
   openExternal(url: string): Promise<void>;
   browser?: BrowserRendererApi;
   log: Logger;
@@ -140,6 +142,24 @@ export function registerRendererIpc(deps: RendererIpcDeps): void {
     if (!deps.graphics) throw new Error("graphics settings unavailable");
     return deps.graphics.setHardwareAcceleration(enabled);
   });
+
+  const browserControl = deps.browserControl;
+  const browserFlag = (value: unknown, name: string): boolean => {
+    if (typeof value !== "boolean") throw new Error(`${name} must be boolean`);
+    return value;
+  };
+  const requireBrowserControl = (): BrowserControlApi => {
+    if (!browserControl) throw new Error("browser control settings unavailable");
+    return browserControl;
+  };
+  handle(IPC.browserControlGet, () => browserControl?.state() ?? null);
+  handle(IPC.browserControlSetEnabled, (enabled) => requireBrowserControl().setControlEnabled(browserFlag(enabled, "controlEnabled")));
+  handle(IPC.browserControlSetIgnoreCertificateErrors, (enabled) =>
+    requireBrowserControl().setIgnoreCertificateErrors(browserFlag(enabled, "ignoreCertificateErrors")),
+  );
+  handle(IPC.browserControlClearCache, () => requireBrowserControl().clearCache());
+  handle(IPC.browserControlClearAll, () => requireBrowserControl().clearAllData());
+  handle(IPC.browserControlImportChrome, () => requireBrowserControl().importChromeLogin());
 
   const browser = deps.browser;
   if (!browser) return;
