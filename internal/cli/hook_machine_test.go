@@ -105,7 +105,7 @@ func TestHookMachineEntryStatusRejectsNonRegularContextFile(t *testing.T) {
 		Scope:       hook.ScopePlugin,
 		ContextFile: contextDir,
 	}
-	if got := machineHookEntryStatus(entry); got != "invalid" {
+	if got, _ := machineHookEntryStatus(entry); got != "invalid" {
 		t.Fatalf("directory context status = %q, want invalid", got)
 	}
 
@@ -114,7 +114,7 @@ func TestHookMachineEntryStatusRejectsNonRegularContextFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	entry.ContextFile = contextFile
-	if got := machineHookEntryStatus(entry); got != "active" {
+	if got, _ := machineHookEntryStatus(entry); got != "active" {
 		t.Fatalf("readable regular context status = %q, want active", got)
 	}
 }

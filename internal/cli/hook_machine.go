@@ -15,6 +15,10 @@ type machineHook struct {
 	Match  string `json:"match,omitempty"`
 	Scope  string `json:"scope"`
 	Status string `json:"status"`
+	// Reason explains a non-active status. Five distinct conditions produce
+	// "invalid", and without this the caller has to guess which one — the
+	// matcher check even discards a message ValidateMatcher already built.
+	Reason string `json:"reason,omitempty"`
 }
 
 type machineHookSource struct {
@@ -80,12 +84,12 @@ func runHookCommand(args []string, out io.Writer) int {
 	if operation == "list" {
 		items := make([]machineHook, 0, len(inspection.Entries))
 		for _, entry := range inspection.Entries {
-			status := machineHookEntryStatus(entry)
+			status, reason := machineHookEntryStatus(entry)
 			match := entry.Match
 			if match == "" {
 				match = "*"
 			}
-			items = append(items, machineHook{Event: string(entry.Event), Match: match, Scope: string(entry.Scope), Status: status})
+			items = append(items, machineHook{Event: string(entry.Event), Match: match, Scope: string(entry.Scope), Status: status, Reason: reason})
 		}
 		sort.SliceStable(items, func(i, j int) bool {
 			if items[i].Event != items[j].Event {
@@ -112,28 +116,32 @@ func runHookCommand(args []string, out io.Writer) int {
 	})
 }
 
-func machineHookEntryStatus(entry hook.Entry) string {
+// machineHookEntryStatus reports the entry status and, when it is not active,
+// which of the checks rejected it. Callers render the reason verbatim.
+func machineHookEntryStatus(entry hook.Entry) (status, reason string) {
 	if !hook.IsKnownEvent(string(entry.Event)) {
-		return "invalid"
+		return "invalid", fmt.Sprintf("unknown event %q", string(entry.Event))
 	}
 	command := strings.TrimSpace(entry.Command)
 	contextFile := strings.TrimSpace(entry.ContextFile)
 	if entry.Scope == hook.ScopePlugin {
 		if command == "" && contextFile == "" {
-			return "invalid"
+			return "invalid", "plugin hook has neither a command nor a contextFile"
 		}
 		if contextFile != "" && !hook.ContextFileUsable(contextFile) {
-			return "invalid"
+			return "invalid", fmt.Sprintf("contextFile %q is not readable", contextFile)
 		}
 	} else if command == "" {
 		// Native project/global loading requires a command; contextFile is an
 		// internal plugin-only execution path.
-		return "invalid"
+		return "invalid", "command is required"
 	}
-	if hook.UsesToolMatcher(entry.Event) && hook.ValidateMatcher(entry.Match) != "" {
-		return "invalid"
+	if hook.UsesToolMatcher(entry.Event) {
+		if msg := hook.ValidateMatcher(entry.Match); msg != "" {
+			return "invalid", msg
+		}
 	}
-	return "active"
+	return "active", ""
 }
 
 func parseHookMachineOptions(args []string) (hookMachineOptions, string, string) {
