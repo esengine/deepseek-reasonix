@@ -6430,11 +6430,15 @@ type Meta struct {
 	ToolApprovalMode      string             `json:"toolApprovalMode"`
 	// TokenMode and AgentPreset are deprecated dual-write wire values pinned to
 	// their safe defaults; one-version-old frontends still parse them.
-	TokenMode   string           `json:"tokenMode"`
-	AgentPreset string           `json:"agentPreset,omitempty"`
-	Goal        string           `json:"goal,omitempty"`
-	GoalStatus  string           `json:"goalStatus,omitempty"`
-	GoalRuntime *GoalRuntimeView `json:"goalRuntime,omitempty"`
+	TokenMode   string `json:"tokenMode"`
+	AgentPreset string `json:"agentPreset,omitempty"`
+	// QualityFloor is the session's recorded delivery floor. The frontend
+	// profile derives from it (composerProfileFromMeta) and would otherwise
+	// reset to standard on every meta refresh, silently dropping delivery.
+	QualityFloor string           `json:"qualityFloor,omitempty"`
+	Goal         string           `json:"goal,omitempty"`
+	GoalStatus   string           `json:"goalStatus,omitempty"`
+	GoalRuntime  *GoalRuntimeView `json:"goalRuntime,omitempty"`
 	// Nil means no authoritative snapshot; non-nil empty means clear the panel.
 	CanonicalTodos *[]evidence.TodoItem `json:"canonicalTodos,omitempty"`
 	// Closed completed todo fingerprints from this session and its lineage.
@@ -6498,6 +6502,7 @@ func (a *App) MetaForTab(tabID string) Meta {
 	a.mu.RLock()
 	tab := a.tabByIDLocked(tabID)
 	snap := snapshotTabRuntimeLocked(tab)
+	qualityFloor := derivedQualityFloor(tab).floor
 	runtimeView := a.sessionRuntimeViewLocked(tab)
 	a.mu.RUnlock()
 	if tab == nil {
@@ -6566,6 +6571,7 @@ func (a *App) MetaForTab(tabID string) Meta {
 		TokenMode:             tokenMode,
 		AgentPreset:           agentPreset,
 		ToolApprovalMode:      toolApprovalMode,
+		QualityFloor:          qualityFloor,
 		Goal:                  goal,
 		GoalStatus:            goalStatus,
 		GoalRuntime:           goalRuntimeViewFromController(snap.ctrl),
