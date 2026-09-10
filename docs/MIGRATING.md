@@ -51,10 +51,10 @@ cd DeepSeek-Reasonix && make build                        # -> bin/reasonix(.exe
 
 | Legacy | Reasonix 1.0 |
 |---|---|
-| TS config files | `reasonix.toml` (project) / `config.toml` in Reasonix home (`~/.reasonix/` on macOS/Linux; `%AppData%\reasonix\` on Windows) from v1.8.1 — see `reasonix.example.toml` and [Configuration paths](./CONFIG_PATHS.md) |
+| TS config files | the project-local config / `config.toml` in Reasonix home (`~/.reasonix/` on macOS/Linux; `%AppData%\reasonix\` on Windows) from v1.8.1 — see `reasonix.example.toml` and [Configuration paths](./CONFIG_PATHS.md) |
 | env / API keys | Provider config keeps `api_key_env`; saved key values live in Reasonix home `.env` (`DEEPSEEK_API_KEY`, `MIMO_API_KEY`, …) |
 | project memory | `REASONIX.md` (+ auto-memory), Claude-Code-compatible |
-| MCP servers | `[[plugins]]` in `reasonix.toml`, or a Claude-Code `.mcp.json` (read as-is) |
+| MCP servers | `[[plugins]]` in the project-local config, or a Claude-Code `.mcp.json` (read as-is) |
 
 On first launch, v1.8.1+ runs a one-time, **non-destructive** import: it reads
 legacy config from `~/Library/Application Support/reasonix/config.toml`,
@@ -160,11 +160,11 @@ and DeepSeek prefix-cache–oriented design.
 - **MCP setup is now add-and-use.** Servers added by the user (Desktop, CLI,
   user config, legacy user import, or a user-installed plugin package) are
   trusted immediately and global installs persist to `config.toml`. Repository
-  `reasonix.toml` / `.mcp.json` servers stay project-scoped and are trusted
+  project-local config / `.mcp.json` servers stay project-scoped and are trusted
   without a separate launch confirmation. Project entries override same-name
-  global entries; `reasonix.toml` overrides `.mcp.json` inside the project.
+  global entries; the project-local config overrides `.mcp.json` inside the project.
   Treat opening an unfamiliar repository as opting into executable project
-  configuration: review `.reasonix/settings.json`, `reasonix.toml`, and
+  configuration: review `.reasonix/settings.json`, the project-local config, and
   `.mcp.json` before starting Reasonix. If a repository causes unexpected MCP
   or Hook behavior, close that workspace and correct or remove the project-local
   entries before reopening it.

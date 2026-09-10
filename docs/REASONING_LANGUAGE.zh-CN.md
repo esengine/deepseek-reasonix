@@ -26,7 +26,7 @@
 设置 -> 模型 -> 使用 -> Agent 运行 -> 思考语言
 ```
 
-桌面端设置会写入用户级默认值。项目仍然可以通过 `./reasonix.toml` 覆盖。
+桌面端设置会写入用户级默认值。项目仍然可以通过项目本地配置覆盖。
 
 ## CLI 与 TUI
 
@@ -52,7 +52,7 @@ reasonix config reasoning-language --local zh
 /reasoning-language en
 ```
 
-斜杠命令会写入用户级设置，并立即更新当前 chat controller，后续 turn 生效。它不会改写当前项目的 `reasonix.toml`；如果要写项目级覆盖，请使用带 `--local` 的 shell 命令。
+斜杠命令会写入用户级设置，并立即更新当前 chat controller，后续 turn 生效。它不会改写项目本地配置；如果要写项目级覆盖，请使用带 `--local` 的 shell 命令。
 
 单次 headless 运行也会读取同一设置：
 

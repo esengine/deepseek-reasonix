@@ -36,7 +36,7 @@ Settings -> Models -> Usage -> Agent runtime -> Thinking language
 ```
 
 The desktop setting writes the user-level default. A project can still override
-it with `./reasonix.toml`.
+it with the project-local config.
 
 ## CLI And TUI
 
@@ -63,8 +63,8 @@ Inside `reasonix`, use the slash command:
 ```
 
 The slash command writes the user-level setting and updates the current chat
-controller for subsequent turns. It does not rewrite the current project's
-`reasonix.toml`; use the shell command with `--local` for that.
+controller for subsequent turns. It does not rewrite the project-local config; use the shell
+command with `--local` for that.
 
 Headless runs also use the same setting:
 

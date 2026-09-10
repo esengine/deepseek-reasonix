@@ -61,7 +61,7 @@ same way.
 
 ```sh
 reasonix setup                    # manage the user-global config
-reasonix setup --local            # manage ./reasonix.toml
+reasonix setup --local
 reasonix setup /path/to/config.toml
 ```
 
@@ -101,8 +101,8 @@ reasonix config currency USD
 `auto` remains unresolved in configuration. With one valid wallet currency it
 can become a runtime session hint; otherwise CLI uses the original currency or
 sorted currency buckets. Language and host locale never select a price table.
-The preference is user-global and cannot be overridden by project
-`reasonix.toml`; `--local` is therefore not supported. Custom prices are preserved.
+The preference is user-global and cannot be overridden by the project-local
+config; `--local` is therefore not supported. Custom prices are preserved.
 
 In an interactive session, `/currency` shows the saved and resolved values, and
 `/currency auto|CNY|USD` changes the preference and refreshes the current
@@ -117,7 +117,7 @@ a project override:
 ```sh
 reasonix config compact-ratio              # show effective value and source
 reasonix config compact-ratio 75           # set the user-global default
-reasonix config compact-ratio --local 75   # override in ./reasonix.toml
+reasonix config compact-ratio --local 75   # set the project-local default
 ```
 
 The editable range is 30–85%, with 80% as the built-in default. Lower values
@@ -125,7 +125,7 @@ compact earlier, may increase summary calls and cost, and may reduce
 prompt-prefix cache reuse; higher values retain more context before compaction.
 Below the threshold, complete tool results may
 increase ordinary request cost; at pressure they are durably pruned before the
-cache-aligned summary runs. Project `reasonix.toml` takes precedence over
+cache-aligned summary runs. The project-local config takes precedence over
 the user config. Changes apply to new CLI sessions; an already-running session
 keeps the threshold it loaded at startup.
 

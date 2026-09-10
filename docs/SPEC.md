@@ -183,11 +183,9 @@ and resources.
   change per RPC; read-only eligibility and destructive filtering remain local
   workflow gates rather than separate process sandboxes.
 - Configuration provenance is runtime metadata and determines persistence scope.
-  Desktop and CLI installs write the user-global `config.toml`; project
-  `reasonix.toml` and `.mcp.json` entries remain in their owning project file.
+  Desktop and CLI installs write the user-global `config.toml`; the project-local config and `.mcp.json` entries remain in their owning project file.
   Every configured source is trusted without a separate launch-confirmation
-  step. Project entries override same-name global entries, and project
-  `reasonix.toml` overrides `.mcp.json`. Editing writes to the effective entry's
+  step. Project entries override same-name global entries, and the project-local config overrides `.mcp.json`. Editing writes to the effective entry's
   source; removing it reveals the next lower-priority declaration.
 - Each remote tool is adapted to the `Tool` interface and injected into the run
   registry, namespaced `mcp__<server>__<tool>` (spaces normalised to `_`) to
@@ -1022,7 +1020,7 @@ Resolution order: **flag > project `./reasonix.toml` > the user config file
 at `~/.reasonix/config.toml` on macOS/Linux and
 `%AppData%\reasonix\config.toml` on Windows. See
 [Configuration paths](./CONFIG_PATHS.md) for migration and related data paths.
-Fields marked user/global only are not overridden by project `reasonix.toml`.
+Fields marked user/global only are not overridden by the project-local config.
 Provider entries name secrets with `api_key_env`; saved key values live in
 Reasonix's global `<Reasonix home>/.env`, shared by CLI and desktop. Project
 `.env`, home `.env`, inherited shell environment variables, legacy credentials,
@@ -1165,7 +1163,7 @@ headers.
 MCP servers may also be declared in a project-root `.mcp.json` using Claude
 Code's exact `mcpServers` schema (`command`/`args`/`env`, `type`/`url`/`headers`,
 `${VAR}` expansion). It is read after the TOML files and merged into
-`[[plugins]]`; on a name collision `reasonix.toml` wins (it is the more explicit,
+`[[plugins]]`; on a name collision the project-local config wins (it is the more explicit,
 Reasonix-specific source). This lets a server already configured for Claude work in
 Reasonix unchanged.
 

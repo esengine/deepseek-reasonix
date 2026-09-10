@@ -38,7 +38,7 @@ Provider 模型能力元数据见
 优先级：**flag > `./reasonix.toml` > 用户配置文件 > 内置默认值**。从
 **Reasonix v1.8.1** 开始，用户配置位于 macOS/Linux 的
 `~/.reasonix/config.toml`，Windows 为 `%AppData%\reasonix\config.toml`；迁移和相关数据路径见
-[配置路径](./CONFIG_PATHS.zh-CN.md)。标注为“仅用户/全局”的字段（包括 agent 轮数上限）不会被 `./reasonix.toml` 覆盖。
+[配置路径](./CONFIG_PATHS.zh-CN.md)。标注为“仅用户/全局”的字段（包括 agent 轮数上限）不会被项目本地配置覆盖。
 Provider 通过 `api_key_env` 命名密钥，真实密钥值保存在 CLI 与桌面端共用的
 Reasonix 全局 `<Reasonix home>/.env`。项目 `.env`、home `.env`、继承的 shell 环境变量、旧 credentials 和系统 keyring 都不再作为 provider key 的运行时 fallback；旧凭据只作为迁移来源读取。项目 `.env` 仍会作为当前 workspace 范围内的 MCP/plugin 非 provider `${VAR}` 展开来源，但不会导入 provider key 或 Reasonix 控制变量。全局 `config.toml` 和 `.env` 的完整结构见
 [配置路径](./CONFIG_PATHS.zh-CN.md)。
@@ -655,12 +655,12 @@ OAuth client 与 token 状态保存在工作区之外、该 server 私有的 Rea
 普通配置流程现在只有一步：使用桌面端的“添加并连接”、`/mcp add`，或直接让 Reasonix
 安装一个 package 或 URL。此类主动安装统一写入用户全局 `config.toml`，安装本身就是授权：
 server 会在当前会话连接，现在和下次启动都不会再弹出第二套信任步骤。当前项目
-`reasonix.toml` 或 `.mcp.json` 中声明的 server 保留在项目配置中，同样默认可信，不需要额外
+项目本地配置或 `.mcp.json` 中声明的 server 保留在项目配置中，同样默认可信，不需要额外
 启动确认。显式 deny 仍然优先；包括声明
 `destructiveHint` 的工具在内都可由普通 Executor 直接执行。独立 Planner 仍拒绝 destructive，
 严格只读 subagent 仍只暴露带只读 hint 的非破坏工具。
 
-MCP 名称按 workspace 解析：项目声明覆盖同名全局安装；项目内部以 `reasonix.toml` 高于
+MCP 名称按 workspace 解析：项目声明覆盖同名全局安装；项目内部以项目本地配置高于
 `.mcp.json`。编辑会写回当前生效声明的原文件；删除高优先级声明后，会显示并启用下一层同名
 声明，而不会顺带删除其他作用域。
 
@@ -723,7 +723,7 @@ RPC 调用。两者都可按服务器覆盖。
 
 **已有 Claude Code 的 `.mcp.json`？** 直接放到项目根目录，Reasonix 会原样读取——其
 `mcpServers` 规范（`command`/`args`/`env`、`type`/`url`/`headers`、`${VAR}` 展开）
-与 `[[plugins]]` 字段一一对应。两处来源会合并加载；同名时以 `reasonix.toml` 为准。
+与 `[[plugins]]` 字段一一对应。两处来源会合并加载；同名时以项目本地配置为准。
 
 ```json
 {
@@ -736,7 +736,7 @@ RPC 调用。两者都可按服务器覆盖。
 
 **从 `0.x` 升级？** 旧的 `~/.reasonix/config.json` 仍会被读取（读其 `mcpServers`、并遵从
 `mcpDisabled`），作为最低优先级来源——所以 MCP 服务器照常可用；方便时再把它们挪进
-`reasonix.toml` 的 `[[plugins]]` 或 `.mcp.json`。
+项目本地配置的 `[[plugins]]` 或 `.mcp.json`。
 
 ## 斜杠命令
 
@@ -915,7 +915,7 @@ canonical Todo 顺序，并且每一步的工作和证据都必须在对应签�
 `reasonix setup` 现在统一管理 provider、模型列表、凭据、连接测试和默认模型；所有修改
 会暂存到“保存并退出”，并同步维护桌面端 provider access。完整用法见
 [CLI 命令参考](./CLI.zh-CN.md#配置供应商)。若要让两个模型协同（执行器 + 规划器，
-各自独立、缓存稳定的 session），向导后手动在 `reasonix.toml` 加一行即可：
+各自独立、缓存稳定的 session），向导后手动在项目本地配置加一行即可：
 
 ```toml
 [agent]

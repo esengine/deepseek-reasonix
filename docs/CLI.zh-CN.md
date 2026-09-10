@@ -54,7 +54,7 @@ reasonix upgrade --force          # 重新安装当前正式版
 
 ```sh
 reasonix setup                    # 管理用户全局配置
-reasonix setup --local            # 管理 ./reasonix.toml
+reasonix setup --local
 reasonix setup /path/to/config.toml
 ```
 
@@ -90,7 +90,7 @@ reasonix config currency USD
 
 `auto` 在配置中保持未解析。只有一个有效钱包币种时，它才会成为当前运行时提示；否则
 CLI 使用原币或按 ISO 排序的币种桶。语言和主机 locale 不再选择价表。该偏好只保存在
-用户全局配置中，项目 `reasonix.toml` 无法覆盖，因此不支持 `--local`。自定义价格不会被修改。
+用户全局配置中，项目本地配置无法覆盖，因此不支持 `--local`。自定义价格不会被修改。
 
 在交互式会话中，`/currency` 显示已保存值和最终解析结果；
 `/currency auto|CNY|USD` 会修改偏好并刷新当前运行时，同时保留当前对话。
@@ -103,12 +103,12 @@ CLI 使用原币或按 ISO 排序的币种桶。语言和主机 locale 不再选
 ```sh
 reasonix config compact-ratio              # 查看生效值及来源
 reasonix config compact-ratio 75           # 设置用户全局默认值
-reasonix config compact-ratio --local 75   # 写入 ./reasonix.toml 项目覆盖
+reasonix config compact-ratio --local 75   # 设置项目本地默认值
 ```
 
 可设置范围为 30–85%，内置默认值为 80%。数值越低越早压缩，可能增加摘要调用和成本，
 也可能降低 prompt prefix 缓存复用率；数值越高则会在压缩前保留更多上下文。阈值以下完整工具结果可能增加普通请求成本；
-达到压力后会先持久剪枝，再运行 cache-aligned 摘要。项目 `reasonix.toml` 的优先级高于
+达到压力后会先持久剪枝，再运行 cache-aligned 摘要。项目本地配置的优先级高于
 用户全局配置。修改会应用于新启动的 CLI 会话；已经运行的会话继续使用启动时加载的阈值。
 
 ## 一次性运行与自动化

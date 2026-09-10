@@ -53,7 +53,7 @@ metadata sidecar 和 `desktop-projects.json` 仍是权威数据。详见
 event log 也仍是权威数据；可重建的跨项目投影见
 [Task Catalog](./TASK_CATALOG.zh-CN.md)。
 
-全局用户配置文件名是 `config.toml`。项目本地配置文件仍叫 `reasonix.toml`。
+全局用户配置文件名是 `config.toml`。项目本地配置位于项目根目录，文件名为 `reasonix.toml`。
 如果有人说“全局 reasonix.toml”，通常指的是 `<Reasonix home>/config.toml`。
 
 ## 全局 `config.toml`
