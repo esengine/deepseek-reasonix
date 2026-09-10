@@ -182,8 +182,11 @@ The trace includes the query, selected IDs and revisions, scores, match reasons,
 freshness, budget use, omitted count, and suppression reason.
 
 The explicit read-only `memory` tool remains available for deeper `search`,
-`read`, and `list` operations. Use `history` instead when exact wording or tool
-output matters.
+`read`, and `list` operations. The separate read-only `instruction_sources`
+capability reports the exact host paths of the standing instruction files
+active for the session; the cache-stable system prompt continues to use
+provider-relative labels such as `user/AGENTS.md`. Use `history` instead when
+exact wording or tool output matters.
 
 ## Safe writes and confirmation
 

@@ -155,8 +155,10 @@ freshness 是提醒和排序信号，不代表事实真假。召回文本会明�
 trace 包含 query、选中的 ID/revision、score、命中原因、freshness、预算使用量、
 omitted 数量和 suppressed 原因。
 
-需要更深检索时仍可使用只读 `memory` tool 的 `search`、`read`、`list`。需要原始措辞或
-工具输出时，应使用 `history`。
+需要更深检索时仍可使用只读 `memory` tool 的 `search`、`read`、`list`。独立的只读
+`instruction_sources` capability 会返回当前会话生效的常驻指令文件的精确主机路径；缓存稳定的
+system prompt 仍使用 `user/AGENTS.md` 这类 provider 相对标签。需要原始措辞或工具输出时，应
+使用 `history`。
 
 ## 安全写入与确认
 

@@ -204,7 +204,9 @@ transcript，仅在唯一自动阈值被跨越时安装 provider 可见的短 **
   不再创建 prune archive。
 
 `history` tool 支持对 session 与归档进行 BM25 搜索；`memory` tool 用于检索自动记忆，
-`remember` 与 `forget` 负责写入和归档。每个真实用户回合前，Reasonix 会用原始用户消息执行
+`remember` 与 `forget` 负责写入和归档。只读 `instruction_sources` capability 按需返回当前
+会话生效的常驻指令文件的精确主机路径，而 provider 可见的指令标题继续使用稳定、与根目录
+无关的来源标签，并把精确路径问题引导到该 capability。每个真实用户回合前，Reasonix 会用原始用户消息执行
 有预算的 BM25 自动召回，把命中作为低权限 user-turn 后缀追加；泛化请求会被抑制，等价事实优先
 项目级版本，stale 内容会降权。这不会修改稳定 system prompt 或工具 schema。
 

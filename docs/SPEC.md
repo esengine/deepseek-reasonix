@@ -367,6 +367,10 @@ when the sole automatic threshold is crossed.
   TUI, desktop panel) but are excluded from active-memory retrieval. Memory
   search uses the same relative BM25 floor and guides the agent to fall back to
   history when exact original wording or tool output matters.
+- The read-only `instruction_sources` capability reports exact host paths for
+  the standing instruction files active in the session. Provider-visible
+  instruction headings remain stable, root-independent provenance labels and
+  route exact-path questions to this capability instead of inviting inference.
 - Before each real user turn, bounded BM25 recall selects relevant active facts
   from the raw user message and appends them as a low-authority user-turn suffix.
   Generic turns are suppressed, project facts override equivalent global

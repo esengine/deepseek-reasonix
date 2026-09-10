@@ -15,7 +15,8 @@ func Block(documents []Document) string {
 	}
 	var b strings.Builder
 	b.WriteString("# Instructions\n\n")
-	b.WriteString("Standing guidance resolved for this workspace and target path. Later entries are more specific and take precedence when rules conflict; the current user request still has highest priority.\n")
+	b.WriteString("Standing guidance resolved for this workspace and target path. Later entries are more specific and take precedence when rules conflict; the current user request still has highest priority. " +
+		"Source labels such as user/AGENTS.md are stable provider-relative provenance labels, not host filesystem paths. When asked for an exact path, resolve and call the read-only instruction_sources capability; do not infer a path from another agent application.\n")
 	workspaceRoot := providerWorkspaceRoot(documents)
 	for _, doc := range documents {
 		fmt.Fprintf(&b, "\n## %s (%s", providerDocumentPath(doc, workspaceRoot), doc.Scope)

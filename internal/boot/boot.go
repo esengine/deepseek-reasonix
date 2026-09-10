@@ -55,7 +55,6 @@ import (
 	"reasonix/internal/outputstyle"
 	"reasonix/internal/permission"
 	"reasonix/internal/plugin"
-	"reasonix/internal/productdocs"
 	"reasonix/internal/provider"
 	"reasonix/internal/recovery"
 	"reasonix/internal/sandbox"
@@ -1193,7 +1192,7 @@ func build(ctx context.Context, opts Options) (*BuildResult, error) {
 			return "docs is already enabled."
 		}
 		docsToolAdded = true
-		reg.Add(productdocs.NewTool())
+		registerDocumentationTools(reg, mem.Docs)
 		return "enabled docs."
 	}
 	sessionToolsAdded := false
