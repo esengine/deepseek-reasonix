@@ -733,10 +733,9 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 			name := m.Name
 			cm.Name = &name
 		}
-		// DeepSeek thinking mode requires provider reasoning to survive every
-		// assistant history turn when tools are in use, including plain turns.
-		// Tool turns with lost reasoning still get an explicit empty key: the API
-		// accepts it, while omitting the key produces a 400. Preserve non-empty
+		// DeepSeek thinking mode requires the reasoning_content KEY on every
+		// assistant history turn, plain turns included: the API accepts an empty
+		// string, while omitting the key produces a 400. Preserve non-empty
 		// reasoning even when the current round has since disabled thinking.
 		if m.Role == provider.RoleAssistant {
 			switch {
@@ -744,10 +743,10 @@ func (c *client) buildRequest(req provider.Request) chatRequest {
 				// Kimi K3 requires the complete assistant message on multi-turn
 				// and tool-call requests, including provider-issued reasoning.
 				cm.ReasoningContent = &m.ReasoningContent
-			case (c.deepseek || c.RequiresToolCallReasoning()) && hasReasoningOrToolCall(m):
-				if c.RequiresToolCallReasoning() || m.ReasoningContent != "" {
-					cm.ReasoningContent = &m.ReasoningContent
-				}
+			case c.RequiresToolCallReasoning() && (c.deepseek || hasReasoningOrToolCall(m)):
+				cm.ReasoningContent = &m.ReasoningContent
+			case c.deepseek && m.ReasoningContent != "":
+				cm.ReasoningContent = &m.ReasoningContent
 			case c.zhipu && (m.ReasoningContent != "" || (c.glmThinkingEnabled() && len(m.ToolCalls) > 0)):
 				// GLM interleaved and preserved thinking require provider-issued
 				// reasoning unchanged. Coding Plan includes the field on tool turns

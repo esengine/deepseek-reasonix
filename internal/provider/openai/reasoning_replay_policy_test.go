@@ -1,6 +1,8 @@
 package openai
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"reasonix/internal/provider"
@@ -86,5 +88,64 @@ func TestGLMSerializesEmptyReasoningContentForToolHistory(t *testing.T) {
 	}})
 	if got := req.Messages[1].ReasoningContent; got == nil || *got != "" {
 		t.Fatalf("GLM empty tool reasoning_content = %v, want explicit empty string", got)
+	}
+}
+
+// TestBuildRequestSendsEmptyReasoningKeyOnPlainDeepSeekTurn guards the wire
+// contract behind the repeated 400s: under the deepseek reasoning protocol in
+// thinking mode, the API rejects an assistant history turn whose
+// reasoning_content KEY is missing — even a plain text turn that carried no
+// reasoning and no tool call. The key must serialize as an empty string.
+// Generic thinking mode and non-DeepSeek backends must keep omitting it on
+// plain turns, so the fix hinges on the protocol, not on thinking alone.
+func TestBuildRequestSendsEmptyReasoningKeyOnPlainDeepSeekTurn(t *testing.T) {
+	msgs := []provider.Message{
+		{Role: provider.RoleUser, Content: "explain"},
+		{Role: provider.RoleAssistant, Content: "plain answer"},
+		{Role: provider.RoleUser, Content: "thanks"},
+	}
+	deepseek, err := json.Marshal((&client{model: "deepseek-v4", deepseek: true, thinkingType: "enabled"}).buildRequest(provider.Request{Messages: msgs}).Messages)
+	if err != nil {
+		t.Fatalf("marshal deepseek: %v", err)
+	}
+	var req []map[string]json.RawMessage
+	if err := json.Unmarshal(deepseek, &req); err != nil {
+		t.Fatalf("unmarshal deepseek: %v", err)
+	}
+	rc, ok := req[1]["reasoning_content"]
+	if !ok {
+		t.Fatal("plain DeepSeek assistant turn must still serialize the reasoning_content key")
+	}
+	if string(rc) != `""` {
+		t.Fatalf("reasoning_content = %s, want empty string", rc)
+	}
+
+	// Generic thinking mode (RequiresToolCallReasoning without the deepseek
+	// protocol) must NOT emit the key on a plain turn — only the deepseek
+	// reasoning protocol demands it.
+	generic, err := json.Marshal((&client{model: "mimo-v2", thinkingType: "enabled"}).buildRequest(provider.Request{Messages: msgs}).Messages)
+	if err != nil {
+		t.Fatalf("marshal generic: %v", err)
+	}
+	if strings.Contains(string(generic), "reasoning_content") {
+		t.Fatalf("generic thinking mode must not serialize reasoning_content on a plain turn: %s", generic)
+	}
+
+	// The deepseek protocol with thinking disabled keeps the old guard: a plain
+	// turn carries no key.
+	off, err := json.Marshal((&client{model: "deepseek-v4", deepseek: true, thinkingType: "disabled"}).buildRequest(provider.Request{Messages: msgs}).Messages)
+	if err != nil {
+		t.Fatalf("marshal deepseek-off: %v", err)
+	}
+	if strings.Contains(string(off), "reasoning_content") {
+		t.Fatalf("deepseek protocol with thinking disabled must not serialize reasoning_content on a plain turn: %s", off)
+	}
+
+	other, err := json.Marshal((&client{model: "mimo-v2"}).buildRequest(provider.Request{Messages: msgs}).Messages)
+	if err != nil {
+		t.Fatalf("marshal other: %v", err)
+	}
+	if strings.Contains(string(other), "reasoning_content") {
+		t.Fatalf("non-DeepSeek backends must not serialize reasoning_content on a plain turn: %s", other)
 	}
 }
