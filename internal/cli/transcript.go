@@ -9,7 +9,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/x/ansi"
 
 	"reasonix/internal/provider"
@@ -324,7 +323,7 @@ type clipboardCopyMsg struct {
 	seq        int
 }
 
-var writeNativeClipboardText = clipboard.WriteAll
+var writeNativeClipboardText = writeClipboardText
 
 func remoteClipboardSession() bool {
 	return os.Getenv("SSH_CONNECTION") != "" || os.Getenv("SSH_CLIENT") != "" || os.Getenv("SSH_TTY") != ""
