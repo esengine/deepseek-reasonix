@@ -44,6 +44,8 @@ branch.
 
 ### Fixed
 
+- **Desktop workbench search:** keep an active session search editable after
+  switching from creation layout, so users can clear the filter (#9952).
 - **Read evidence recovery:** partial reads no longer freeze independent work
   or ordinary final answers. Explicit full reads retain bounded completion
   checks. Rejected edits track operation/version requirements so successful

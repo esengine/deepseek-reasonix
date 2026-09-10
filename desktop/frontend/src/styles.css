@@ -30083,7 +30083,7 @@ body > .mermaid-diagram--fullscreen {
   gap: 4px;
 }
 
-.sidebar--workbench .project-tree__search {
+.sidebar--workbench .project-tree__search:not([data-active="true"]) {
   display: none;
 }
 
