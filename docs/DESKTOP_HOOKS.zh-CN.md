@@ -64,11 +64,13 @@ Hooks 让 Reasonix 在会话、用户输入、工具调用、模型返回、压�
       { "command": "node ~/.reasonix/hooks/check-prompt.js" }
     ],
     "Stop": [
-      { "command": "osascript -e 'display notification \"Turn done\" with title \"Reasonix\"'" }
+      { "command": "echo Turn done" }
     ]
   }
 }
 ```
+
+> ⚠️ `command` 通过平台 shell 执行（macOS/Linux 用 `sh -c`，Windows 用 `cmd /c`）。上面示例用跨平台的 `echo`，不会依赖任何平台专用命令。若你只想在 macOS 上弹桌面通知，可改成 `osascript -e 'display notification "Turn done" with title "Reasonix"'`；Windows 上没有 `osascript`，请勿照抄该写法，可用 PowerShell：`powershell -NoProfile -Command "Write-Host 'Turn done'"` 或干脆省略该 Stop hook，否则每次会话结束都会报"命令不存在"。
 
 桌面端 JSON 编辑器也接受两种便捷输入，保存前会格式化回 `{"hooks": ...}`：
 
