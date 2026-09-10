@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"reasonix/internal/control"
 	"reasonix/internal/event"
 	"reasonix/internal/i18n"
 )
@@ -106,7 +107,7 @@ func (m chatTUI) handleChooserKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			c.tab++
 			c.cursor = 0
 		}
-		return m, nil
+		return m.chooserAutoSubmitIfDone()
 	}
 
 	if c.onSubmitTab() {
@@ -187,6 +188,16 @@ func (m chatTUI) chooserAdvance() (tea.Model, tea.Cmd) {
 	if c.tab < len(c.questions) {
 		c.tab++
 		c.cursor = 0
+	}
+	return m.chooserAutoSubmitIfDone()
+}
+
+// chooserAutoSubmitIfDone commits immediately when the Submit tab is reached in
+// YOLO mode with every question answered: YOLO skips confirmations, so the
+// Submit-tab Enter on an already-complete batch would be pure ceremony.
+func (m chatTUI) chooserAutoSubmitIfDone() (tea.Model, tea.Cmd) {
+	if m.chooser.onSubmitTab() && m.chooser.allAnswered() && m.ctrl.ToolApprovalMode() == control.ToolApprovalYolo {
+		return m.chooserAnswer(m.chooser.answers())
 	}
 	return m, nil
 }
