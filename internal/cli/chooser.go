@@ -138,11 +138,16 @@ func (m chatTUI) handleChooserKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		return m.chooserActivate(c.cursor)
 	default:
-		// number keys 1..9 jump to / pick an option
-		if s := msg.String(); len(s) == 1 && s[0] >= '1' && s[0] <= '9' {
-			if idx := int(s[0] - '1'); idx < len(q.Options) {
-				return m.chooserActivate(idx)
+		// number keys 1..9 pick an option: toggle it in a multi-select
+		// question, select-and-advance in a single-select one.
+		if idx, ok := numberKeyIndex(msg.String(), len(q.Options)); ok {
+			if q.Multi {
+				c.cursor = idx
+				c.sel[c.tab][idx] = !c.sel[c.tab][idx]
+				c.custom[c.tab] = ""
+				return m, nil
 			}
+			return m.chooserActivate(idx)
 		}
 	}
 	return m, nil

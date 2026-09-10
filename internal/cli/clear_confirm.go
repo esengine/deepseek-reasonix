@@ -30,6 +30,13 @@ func (m chatTUI) handleClearConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 			return m.confirmClearContext()
 		}
 		m.clearConfirm = nil
+	default:
+		if idx, ok := numberKeyIndex(msg.String(), 2); ok {
+			if idx == 0 {
+				return m.confirmClearContext()
+			}
+			m.clearConfirm = nil
+		}
 	}
 	return m, nil
 }

@@ -226,6 +226,14 @@ func (m chatTUI) handleMCPManagerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m.removeSelectedMCP()
 			}
 			p.stage = mcpStageDetail
+		default:
+			if idx, ok := numberKeyIndex(msg.String(), 2); ok {
+				if idx == 0 {
+					p.confirm = 0
+					return m.removeSelectedMCP()
+				}
+				p.stage = mcpStageDetail
+			}
 		}
 	case mcpStageConfirmClearAuth:
 		switch msg.String() {
@@ -245,6 +253,14 @@ func (m chatTUI) handleMCPManagerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				return m.clearSelectedMCPAuthentication()
 			}
 			p.stage = mcpStageDetail
+		default:
+			if idx, ok := numberKeyIndex(msg.String(), 2); ok {
+				if idx == 0 {
+					p.confirm = 0
+					return m.clearSelectedMCPAuthentication()
+				}
+				p.stage = mcpStageDetail
+			}
 		}
 	}
 	return m, nil

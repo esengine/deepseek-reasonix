@@ -103,6 +103,11 @@ func (m chatTUI) handleResumePickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd)
 		return m.applyResumePick()
 	case "esc":
 		m.resumePick = nil
+	default:
+		if idx, ok := numberKeyIndex(msg.String(), len(r.sessions)); ok {
+			r.sel = idx
+			return m.applyResumePick()
+		}
 	}
 	return m, nil
 }

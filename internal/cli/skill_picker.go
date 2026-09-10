@@ -204,6 +204,12 @@ func (m chatTUI) handleSkillPickerSourcesKey(msg tea.KeyPressMsg) (tea.Model, te
 		p.showDiagnostics = false
 	case "r":
 		m.rescanSkills()
+	default:
+		if idx, ok := numberKeyIndex(msg.String(), len(visible)); ok {
+			p.sourceSel = idx
+			p.mode = pickerSourceSkills
+			p.sourceSkillSel = 0
+		}
 	}
 	return m, nil
 }
@@ -257,6 +263,11 @@ func (m chatTUI) handleSkillPickerDetailKey(msg tea.KeyPressMsg) (tea.Model, tea
 		}
 	case " ", "space":
 		p.toggleSkill(p.detailSkill.Name)
+	default:
+		if idx, ok := numberKeyIndex(msg.String(), len(actions)); ok {
+			p.detailAction = idx
+			return m.applySkillAction(p.detailSkill, actions[idx])
+		}
 	}
 	p.detailAction = clampInt(p.detailAction, len(actions))
 	return m, nil
@@ -281,6 +292,14 @@ func (m chatTUI) handleSkillPickerConfirmDeleteKey(msg tea.KeyPressMsg) (tea.Mod
 			return m.deleteSkillPick(p.deleteSkill)
 		}
 		p.mode = pickerDetail
+	default:
+		if idx, ok := numberKeyIndex(msg.String(), 2); ok {
+			if idx == 0 {
+				p.confirm = 0
+				return m.deleteSkillPick(p.deleteSkill)
+			}
+			p.mode = pickerDetail
+		}
 	}
 	return m, nil
 }

@@ -48,6 +48,11 @@ func (m chatTUI) handleCopyPickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.applyCopyPick()
 	case "esc":
 		m.copyPick = nil
+	default:
+		if idx, ok := numberKeyIndex(msg.String(), len(p.parts)); ok {
+			p.sel = idx
+			return m.applyCopyPick()
+		}
 	}
 	return m, nil
 }

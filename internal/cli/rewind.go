@@ -121,6 +121,25 @@ func (m chatTUI) handleRewindKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			r.scope = 5
 			return m.applyRewind()
 		}
+	default:
+		if n, ok := numberKeyIndex(msg.String(), 9); ok {
+			switch r.stage {
+			case 0:
+				// Turn rows are numbered by turn (Turn+1), not list position.
+				for i, meta := range r.metas {
+					if meta.Turn == n {
+						r.sel = i
+						r.stage = 1
+						break
+					}
+				}
+			case 1:
+				if n < len(rewindActions) {
+					r.scope = n
+					return m.applyRewind()
+				}
+			}
+		}
 	}
 	return m, nil
 }
