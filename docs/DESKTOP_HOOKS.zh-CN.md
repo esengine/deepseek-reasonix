@@ -125,7 +125,7 @@ Hooks 让 Reasonix 在会话、用户输入、工具调用、模型返回、压�
 | `SessionStart` | 会话第一次变为活跃，或 `/new`、清空后新会话开始 | 否 | stdout 会作为下一轮模型上下文注入 |
 | `SessionEnd` | 会话关闭、切换、`/new`、清空或控制器释放时 | 否 | 无特殊作用 |
 | `SubagentStop` | 前台 `task` 子代理完成后 | 否 | 无特殊作用 |
-| `Notification` | 需要用户注意时，例如等待工具审批 | 否 | 无特殊作用 |
+| `Notification` | 需要用户注意时，例如等待工具审批或等待回答提问 | 否 | 无特殊作用 |
 | `PreCompact` | 上下文压缩开始前 | 否 | stdout 会追加为压缩摘要的额外指导 |
 
 只有 `PreToolUse` 和 `UserPromptSubmit` 是阻塞型事件。阻塞型事件中，命令 `exit 2` 或超时会阻断后续执行。
@@ -151,7 +151,7 @@ Reasonix 会把一行 JSON 写入 hook 命令的 stdin。所有 payload 都至�
 | `SessionStart` | 无 | `{"event":"SessionStart","cwd":"/repo"}` |
 | `SessionEnd` | 无 | `{"event":"SessionEnd","cwd":"/repo"}` |
 | `SubagentStop` | `lastAssistantText` | `{"event":"SubagentStop","cwd":"/repo","lastAssistantText":"子代理结论"}` |
-| `Notification` | `message` | `{"event":"Notification","cwd":"/repo","message":"approval needed: bash go test ./..."}` |
+| `Notification` | `message`, `notificationType` | `{"event":"Notification","cwd":"/repo","message":"approval needed: bash go test ./...","notificationType":"permission_prompt"}`；等待回答提问时 `notificationType` 为 `question_prompt` |
 | `PreCompact` | `trigger` | `{"event":"PreCompact","cwd":"/repo","trigger":"manual"}` |
 
 `toolArgs` 是工具参数的原始 JSON。比如 `bash` 通常会带 `{"command":"..."}`，其它工具会按自己的 schema 传入。`Notification.message` 会做必要的隐私收敛，例如记忆审批只包含工具名，不把记忆正文发给外部通知 hook。

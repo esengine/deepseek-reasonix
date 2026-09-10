@@ -162,6 +162,7 @@ var Chinese = Messages{
 	SandboxEscapeApprovalChoices:           "1. 允许一次\n2. 本会话使用真实环境\n3. 拒绝\n选择 [1/2/3]（兼容 y/a/n）",
 	ApprovalNeededFmt:                      "需要审批：%s",
 	ApprovalNeededWithSubjectFmt:           "需要审批：%s %s",
+	AnswerNeededFmt:                        "需要回答：%s",
 	ToolApprovalSourceFmt:                  "来源: %s",
 	ToolApprovalBuiltIn:                    "内置工具",
 	ToolApprovalImageUse:                   "将读取提供的图片用于图像理解。",

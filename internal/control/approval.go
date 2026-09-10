@@ -864,6 +864,13 @@ func approvalNotificationText(tool, subject string) string {
 	return fmt.Sprintf(i18n.M.ApprovalNeededWithSubjectFmt, tool, subject)
 }
 
+func askNotificationText(questions []event.AskQuestion) string {
+	if len(questions) == 0 {
+		return fmt.Sprintf(i18n.M.AnswerNeededFmt, "")
+	}
+	return fmt.Sprintf(i18n.M.AnswerNeededFmt, questions[0].Prompt)
+}
+
 func permissionRequestHookPayload(tool, subject string, args json.RawMessage) (string, json.RawMessage, bool) {
 	switch tool {
 	case planApprovalTool:

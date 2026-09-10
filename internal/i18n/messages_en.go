@@ -161,6 +161,7 @@ var English = Messages{
 	SandboxEscapeApprovalChoices:           "1. Allow once\n2. Use real environment for this session\n3. Deny\nChoose [1/2/3] (y/a/n also work)",
 	ApprovalNeededFmt:                      "approval needed: %s",
 	ApprovalNeededWithSubjectFmt:           "approval needed: %s %s",
+	AnswerNeededFmt:                        "answer needed: %s",
 	ToolApprovalSourceFmt:                  "Source: %s",
 	ToolApprovalBuiltIn:                    "built-in tool",
 	ToolApprovalImageUse:                   "It will read provided image input for image understanding.",

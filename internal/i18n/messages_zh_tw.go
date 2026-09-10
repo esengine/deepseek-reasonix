@@ -158,6 +158,7 @@ var ChineseTraditional = Messages{
 	SandboxEscapeApprovalChoices:           "1. 允許一次\n2. 本會話使用真實環境\n3. 拒絕\n選擇 [1/2/3]（相容 y/a/n）",
 	ApprovalNeededFmt:                      "需要核准：%s",
 	ApprovalNeededWithSubjectFmt:           "需要核准：%s %s",
+	AnswerNeededFmt:                        "需要回答：%s",
 	ToolApprovalSourceFmt:                  "來源: %s",
 	ToolApprovalBuiltIn:                    "內建工具",
 	ToolApprovalImageUse:                   "將讀取提供的圖片用於圖像理解。",

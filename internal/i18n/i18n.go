@@ -167,6 +167,7 @@ type Messages struct {
 	SandboxEscapeApprovalChoices           string // approval choice list for OS sandbox escape prompts
 	ApprovalNeededFmt                      string // notification text for a pending approval, tool only
 	ApprovalNeededWithSubjectFmt           string // notification text for a pending approval with subject
+	AnswerNeededFmt                        string // notification text for a pending ask question
 	ToolApprovalSourceFmt                  string // "Source: %s" / "来源: %s"
 	ToolApprovalBuiltIn                    string // built-in tool source label
 	ToolApprovalImageUse                   string // image-understanding detail for understand_image-style tools
