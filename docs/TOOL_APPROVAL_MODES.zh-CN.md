@@ -106,7 +106,7 @@ Yolo 模式用于最大化连续执行。开启后，普通工具审批会被跳
 
 Yolo 是唯一可以绕过嵌套/间接 Bash 人工审批要求的工具权限姿态；显式 `deny` 与 Sandbox 仍然生效。
 
-因为 Yolo 本就承诺跳过确认，CLI 的 `/clear` 命令在 Yolo 模式下会直接清空会话，不再弹出确认覆盖层；Ask、Auto 与 Plan 模式保留确认。
+因为 Yolo 本就承诺跳过确认，`/clear` 命令在 Yolo 模式下会直接清空会话，不再弹出确认覆盖层；Ask、Auto 与 Plan 模式保留确认。此行为同时适用于 CLI 输入框与 ACP 会话（`reasonix acp`）：ACP 在非 Yolo 模式下通过 `session/request_permission` 往返询问 host，在 Yolo 模式下直接清空。
 
 ### 怎么开启
 

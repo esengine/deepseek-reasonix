@@ -154,6 +154,11 @@ Reasonix 把互不相关的选择拆成独立控制轴，而不是混在一个 m
 Host 应让 `session/prompt` 请求保持打开，直到 Reasonix 返回停止原因；期间仍需同时处理
 双向 request 和 notification。
 
+提交 `/clear` 会在原地清空当前会话（新 transcript、同一 session id），与 CLI 的
+`/clear` 一致。当会话的工具审批模式为 Yolo 时立即清空；Ask、Auto 与 Plan 模式下，
+Reasonix 会先通过 `session/request_permission` 往返询问客户端，选择 `Clear the session`
+确认清空，`Cancel` 则中止。该命令会以 `clear` 出现在 `available_commands_update` 中。
+
 Reasonix 只会返回 ACP v1 规定的停止原因。工作已完成但仍需 final-readiness 检查时，
 agent 会发送带 `[warning]` 的消息 chunk 并返回 `end_turn`；厂商状态仍保持
 `readiness_paused`，便于 host 提供恢复入口。客户端取消始终返回 `cancelled`，即使被中断
