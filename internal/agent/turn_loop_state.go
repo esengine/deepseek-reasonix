@@ -17,6 +17,9 @@ type turnLoopState struct {
 	previousErrorCategories map[string]struct{}
 	softBudgetNudged        bool
 	softBudgetNudgeRound    int
+	// softBudgetExtensions counts read-only budget doublings granted this turn
+	// via extend_research_budget (0..3 -> 10/20/40/80 rounds).
+	softBudgetExtensions int
 }
 
 func (s *turnLoopState) setDispatchClasses(classes map[string]tool.CallClass) {
@@ -92,6 +95,28 @@ func (s *turnLoopState) advanceErrorCategories(current map[string]int) bool {
 	}
 	s.previousErrorCategories = next
 	return hit
+}
+
+// softBudgetExtensionCount returns how many read-only budget doublings were
+// granted this turn.
+func (s *turnLoopState) softBudgetExtensionCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.softBudgetExtensions
+}
+
+// extendSoftBudget grants one doubling (at most max per turn) and re-arms the
+// nudge so the extended budget is measured from the current round.
+func (s *turnLoopState) extendSoftBudget(max int) (int, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.softBudgetExtensions >= max {
+		return s.softBudgetExtensions, false
+	}
+	s.softBudgetExtensions++
+	s.softBudgetNudged = false
+	s.softBudgetNudgeRound = 0
+	return s.softBudgetExtensions, true
 }
 
 func (s *turnLoopState) markSoftBudgetNudged(round int) bool {

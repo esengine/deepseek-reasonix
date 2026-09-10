@@ -1247,6 +1247,10 @@ func (a *Agent) Run(ctx context.Context, input string) (runErr error) {
 	}
 	a.restoreProtocolProjection()
 	ctx = a.withProviderCacheSession(ctx)
+	// The read-only research budget can be doubled from inside the turn via
+	// extend_research_budget; stamp the extender so the tool is provider-visible
+	// and reaches this turn's soft-budget state.
+	ctx = tool.WithResearchBudgetExtender(ctx, a)
 	runMaxSteps := a.maxSteps
 	runMaxStepsKey := a.maxStepsKey
 	a.recovery.runSeq.Add(1)
