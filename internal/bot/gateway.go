@@ -2469,6 +2469,14 @@ func (gw *BotGateway) sessionProfileForResolvedOverride(msg InboundMessage, over
 	sessionPathOptional := false
 	if enabled {
 		sessionPath = override.sessionPath
+	} else {
+		// After the gateway process restarts (desktop or machine reboot) the
+		// in-memory override is gone: fall back to the persisted
+		// session_mappings entry for this remote chat, equivalent to an
+		// automatic /attach session on startup. The context then survives
+		// process restarts until the user explicitly runs /new, /attach
+		// session, or /use project.
+		sessionPath = gw.savedSessionPathForMessage(msg)
 	}
 	// A persisted session_mappings binding is the durable chat→session link
 	// the desktop writes into the connection config. Without consuming it
@@ -2532,6 +2540,40 @@ func (gw *BotGateway) sessionMappingPathForMessage(msg InboundMessage) string {
 		return ""
 	}
 	return path
+}
+
+// savedSessionPathForMessage restores the session file path this remote chat
+// last used from the persisted session_mappings when no in-memory override
+// exists. It returns an empty string unless the session file still exists and
+// is not a directory, so a cleaned-up old session degrades to a fresh session
+// instead of failing Resume and leaving the bot unresponsive for that chat.
+// The file availability check matches /attach session.
+func (gw *BotGateway) savedSessionPathForMessage(msg InboundMessage) string {
+	gw.mu.Lock()
+	defer gw.mu.Unlock()
+	var mappings []SessionMapping
+	if msg.ConnectionID != "" {
+		if connChannel, ok := gw.cfg.ConnectionChannels[msg.ConnectionID]; ok {
+			mappings = connChannel.SessionMappings
+		}
+	}
+	if len(mappings) == 0 {
+		if platChannel, ok := gw.cfg.Channels[msg.Platform]; ok {
+			mappings = platChannel.SessionMappings
+		}
+	}
+	mapping, ok := matchingSessionMapping(mappings, msg)
+	if !ok {
+		return ""
+	}
+	sessionPath := botSessionPathFromTarget(mapping.SessionID)
+	if sessionPath == "" {
+		return ""
+	}
+	if info, err := os.Stat(sessionPath); err != nil || info.IsDir() {
+		return ""
+	}
+	return sessionPath
 }
 
 func sessionStateMatchesRuntime(state *sessionState, profile sessionRuntimeProfile) bool {
